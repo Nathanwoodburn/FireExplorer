@@ -211,6 +211,23 @@
             }
         }
 
+        // Convert unicode/emoji to punycode for Handshake names
+        function toPunycode(name) {
+            // Check if name contains non-ASCII characters
+            if (!/[^\x00-\x7F]/.test(name)) {
+                return name; // Already ASCII, no conversion needed
+            }
+            
+            try {
+                // Use the browser's built-in URL API to convert to punycode
+                const url = new URL(`http://${name}`);
+                return url.hostname;
+            } catch {
+                // Fallback: return original if conversion fails
+                return name;
+            }
+        }
+
         // Format chain data nicely
         function formatChainData(chain) {
             return `
@@ -1021,8 +1038,9 @@
                 alert('Please enter a name');
                 return;
             }
-            updateURL('name', name);
-            const data = await apiCall(`name/${name}`);
+            const punyName = toPunycode(name);
+            updateURL('name', punyName);
+            const data = await apiCall(`name/${punyName}`);
             
             // Use formatted display
             const resultElement = document.getElementById('name-result');
@@ -1039,7 +1057,8 @@
                 alert('Please enter a name');
                 return;
             }
-            const data = await apiCall(`nameresource/${name}`);
+            const punyName = toPunycode(name);
+            const data = await apiCall(`nameresource/${punyName}`);
             
             // Use formatted display
             const resultElement = document.getElementById('name-result');
@@ -1056,7 +1075,8 @@
                 alert('Please enter a name');
                 return;
             }
-            const data = await apiCall(`namesummary/${name}`);
+            const punyName = toPunycode(name);
+            const data = await apiCall(`namesummary/${punyName}`);
             
             // Use formatted display
             const resultElement = document.getElementById('name-result');
