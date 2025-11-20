@@ -21,10 +21,6 @@
         <!-- Status Cards -->
         <section class="status-section">
             <div class="card status-card">
-                <h3>Node Status</h3>
-                <div id="node-status" class="status-content">Loading...</div>
-            </div>
-            <div class="card status-card">
                 <h3>Chain Info</h3>
                 <div id="chain-status" class="status-content">Loading...</div>
             </div>
@@ -872,9 +868,6 @@
 
         // Load status on page load
         async function loadStatus() {
-            const nodeStatus = await apiCall('status');
-            displayResult('node-status', nodeStatus, 'status');
-
             const chainStatus = await apiCall('chain');
             if (chainStatus.chain) {
                 document.getElementById('chain-status').innerHTML = formatChainData(chainStatus.chain);
@@ -1040,7 +1033,17 @@
                 return;
             }
             const data = await apiCall(`namehash/${nameHash}`);
-            displayResult('name-result', data);
+            
+            // Check if result is valid and redirect to name page
+            const resultElement = document.getElementById('name-result');
+            if (data.error) {
+                resultElement.innerHTML = `<div class="error">Error: ${data.error.message ? data.error.message : "Failed to lookup hash"}</div>`;
+            } else if (data.result && typeof data.result === 'string') {
+                // Valid name found, redirect to name page
+                window.location.href = `/name/${data.result}`;
+            } else {
+                resultElement.innerHTML = `<div class="error">No name found for this hash</div>`;
+            }
         }
 
         async function searchCoin() {
