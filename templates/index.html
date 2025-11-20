@@ -585,7 +585,7 @@
                                     let formattedValue;
                                     if (typeof value === 'number') {
                                         // Check if it looks like a block number (large integer) or a decimal (days/hours)
-                                        if (Number.isInteger(value) && value > 100) {
+                                        if ((Number.isInteger(value) && value > 100) || key.toLowerCase().includes('height') || key.toLowerCase().includes('block')) {
                                             formattedValue = value.toLocaleString();
                                         } else {
                                             formattedValue = value.toFixed(2);
