@@ -103,6 +103,12 @@ def name_route(name):
     return render_template("index.html", datetime=current_datetime)
 
 
+@app.route("/coin/<path:coin_hash>/<int:index>")
+def coin_route(coin_hash, index):
+    current_datetime = datetime.now().strftime("%d %b %Y %I:%M %p")
+    return render_template("index.html", datetime=current_datetime)
+
+
 @app.route("/<path:path>")
 def catch_all(path: str):
     if os.path.isfile("templates/" + path):

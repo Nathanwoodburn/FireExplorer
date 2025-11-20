@@ -169,6 +169,11 @@
                         searchName();
                         break;
                 }
+            } else if (parts.length === 3 && parts[0] === 'coin') {
+                // Handle coin URLs: /coin/hash/index
+                document.getElementById('coin-hash').value = parts[1];
+                document.getElementById('coin-index').value = parts[2];
+                searchCoin();
             }
         }
 
@@ -390,6 +395,133 @@
             return html;
         }
 
+        // Format address coins nicely
+        function formatAddressCoins(coins) {
+            if (!coins || coins.error) {
+                return `<div class="error">Error: ${coins.error || 'Invalid coin data'}</div>`;
+            }
+
+            if (!Array.isArray(coins) || coins.length === 0) {
+                return `<div class="error">No coins found for this address</div>`;
+            }
+
+            const formatValue = (value) => (value / 1e6).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' HNS';
+            
+            const totalValue = coins.reduce((sum, coin) => sum + coin.value, 0);
+            
+            let html = `
+                <div class="tx-details">
+                    <div class="tx-section">
+                        <h4>Coins (${coins.length}) - Total: ${formatValue(totalValue)}</h4>
+                        <div class="tx-io-list">
+                            ${coins.map((coin, i) => `
+                                <div class="tx-io-item">
+                                    <div class="tx-io-header">
+                                        <span class="tx-io-index">Output #${coin.index}</span>
+                                        <span class="tx-io-value">${formatValue(coin.value)}</span>
+                                    </div>
+                                    <div class="tx-io-address">${coin.address}</div>
+                                    <div style="cursor: pointer;" onclick="window.location.href='/tx/${coin.hash}'">
+                                        <div class="tx-io-hash mono">${coin.hash}</div>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; font-size: 0.85rem; color: #b0b0b0;">
+                                        <span>Height: ${coin.height.toLocaleString()}</span>
+                                        <span>Coinbase: ${coin.coinbase ? 'Yes' : 'No'}</span>
+                                        <span>Covenant: ${coin.covenant.action}</span>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <div class="tx-section">
+                        <button class="secondary-btn" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">Show Raw JSON</button>
+                        <pre style="display: none;">${JSON.stringify(coins, null, 2)}</pre>
+                    </div>
+                </div>
+            `;
+            
+            return html;
+        }
+
+        // Format individual coin nicely
+        function formatCoin(coin) {
+            if (!coin || coin.error) {
+                return `<div class="error">Error: ${coin.error || 'Invalid coin data'}</div>`;
+            }
+
+            const formatValue = (value) => (value / 1e6).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' HNS';
+            
+            let html = `
+                <div class="tx-details">
+                    <div class="tx-section">
+                        <h4>Coin Information</h4>
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <label>Value:</label>
+                                <span>${formatValue(coin.value)}</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Output Index:</label>
+                                <span>${coin.index}</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Height:</label>
+                                <span>${coin.height.toLocaleString()}</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Coinbase:</label>
+                                <span>${coin.coinbase ? 'Yes' : 'No'}</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Version:</label>
+                                <span>${coin.version}</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Covenant:</label>
+                                <span>${coin.covenant.action}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tx-section">
+                        <h4>Transaction Hash</h4>
+                        <div style="cursor: pointer; padding: 1rem; background: rgba(255, 107, 53, 0.1); border-radius: 8px;" onclick="window.location.href='/tx/${coin.hash}'">
+                            <div class="mono" style="word-break: break-all; color: #ff6b35;">${coin.hash}</div>
+                        </div>
+                    </div>
+
+                    <div class="tx-section">
+                        <h4>Address</h4>
+                        <div style="cursor: pointer; padding: 1rem; background: rgba(255, 107, 53, 0.1); border-radius: 8px;" onclick="window.location.href='/address/${coin.address}'">
+                            <div class="mono" style="word-break: break-all; color: #ff6b35;">${coin.address}</div>
+                        </div>
+                    </div>
+
+                    ${coin.covenant.items && coin.covenant.items.length > 0 ? `
+                        <div class="tx-section">
+                            <h4>Covenant Items</h4>
+                            <div style="background: rgba(255, 107, 53, 0.05); padding: 1rem; border-radius: 8px;">
+                                ${coin.covenant.items.map((item, i) => `
+                                    <div style="margin-bottom: 0.5rem;">
+                                        <span style="color: #b0b0b0;">Item ${i}:</span> 
+                                        <span class="mono" style="word-break: break-all;">${item}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    <div class="tx-section">
+                        <button class="secondary-btn" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">Show Raw JSON</button>
+                        <pre style="display: none;">${JSON.stringify(coin, null, 2)}</pre>
+                    </div>
+                </div>
+            `;
+            
+            return html;
+        }
+
         // Format transaction data nicely
         function formatTransactionData(tx) {
             if (!tx || tx.error) {
@@ -599,8 +731,16 @@
                 alert('Please enter an address');
                 return;
             }
+            updateURL('address', address);
             const data = await apiCall(`coin/address/${address}`);
-            displayResult('address-result', data);
+            
+            // Use formatted display instead of raw JSON
+            const resultElement = document.getElementById('address-result');
+            if (data.error) {
+                resultElement.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+            } else {
+                resultElement.innerHTML = formatAddressCoins(data);
+            }
         }
 
         async function searchName() {
@@ -651,8 +791,16 @@
                 alert('Please enter both coin hash and index');
                 return;
             }
+            updateURL('coin', `${coinHash}/${coinIndex}`);
             const data = await apiCall(`coin/${coinHash}/${coinIndex}`);
-            displayResult('coin-result', data);
+            
+            // Use formatted display instead of raw JSON
+            const resultElement = document.getElementById('coin-result');
+            if (data.error) {
+                resultElement.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+            } else {
+                resultElement.innerHTML = formatCoin(data);
+            }
         }
 
         // Load status when page loads
