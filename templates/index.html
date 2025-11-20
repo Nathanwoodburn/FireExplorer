@@ -31,6 +31,7 @@
             <div class="card status-card">
                 <h3>Mempool</h3>
                 <div id="mempool-status" class="status-content">Loading...</div>
+                <div id="mempool-txs" class="mempool-txs-container"></div>
             </div>
         </section>
 
@@ -161,14 +162,25 @@
         function formatMempoolData(mempool) {
             // Check if mempool is an array of transaction IDs
             if (Array.isArray(mempool)) {
-                return `
-                    <div class="info-grid">
-                        <div class="info-item"><strong>Transactions:</strong> ${mempool.length.toLocaleString()}</div>
-                        <div class="info-item no-border">
-                            <a href="/mempool" class="view-all-btn">View All Transactions</a>
-                        </div>
+                // Hide the loading status
+                document.getElementById('mempool-status').style.display = 'none';
+                
+                // Display transaction count and list
+                const mempoolTxsContainer = document.getElementById('mempool-txs');
+                mempoolTxsContainer.innerHTML = `
+                    <div class="mempool-header">
+                        <strong>Transactions: ${mempool.length.toLocaleString()}</strong>
+                    </div>
+                    <div class="tx-list">
+                        ${mempool.map(txId => `
+                            <div class="tx-item">
+                                <span class="tx-hash mono">${txId}</span>
+                                <button class="tx-view-btn" onclick="viewTransaction('${txId}')">View</button>
+                            </div>
+                        `).join('')}
                     </div>
                 `;
+                return '';
             }
             // Fallback for object format
             return `
@@ -180,6 +192,32 @@
                     <div class="info-item"><strong>Airdrops:</strong> ${mempool.airdrops || 0}</div>
                 </div>
             `;
+        }
+
+        // View transaction details
+        async function viewTransaction(txId) {
+            const data = await apiCall(`tx/${txId}`);
+            
+            // Create a modal or use the search result area
+            const modal = document.createElement('div');
+            modal.className = 'tx-modal';
+            modal.onclick = (e) => {
+                if (e.target === modal) {
+                    modal.remove();
+                }
+            };
+            modal.innerHTML = `
+                <div class="tx-modal-content">
+                    <div class="tx-modal-header">
+                        <h3>Transaction Details</h3>
+                        <button class="tx-modal-close" onclick="this.parentElement.parentElement.parentElement.remove()">×</button>
+                    </div>
+                    <div class="tx-modal-body">
+                        ${data.error ? `<div class="error">Error: ${data.error}</div>` : `<pre>${JSON.stringify(data, null, 2)}</pre>`}
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
         }
 
         // Display helper
@@ -223,7 +261,7 @@
 
         // Search functions
         async function searchBlock() {
-            const blockId = document.getElementById('block-input').value.trim();
+            const blockId = document.getElementById('block-input').value.trim().replace(/,/g, '');
             if (!blockId) {
                 alert('Please enter a block height or hash');
                 return;
@@ -233,7 +271,7 @@
         }
 
         async function searchHeader() {
-            const blockId = document.getElementById('block-input').value.trim();
+            const blockId = document.getElementById('block-input').value.trim().replace(/,/g, '');
             if (!blockId) {
                 alert('Please enter a block height or hash');
                 return;
@@ -243,7 +281,7 @@
         }
 
         async function searchTx() {
-            const txId = document.getElementById('tx-input').value.trim();
+            const txId = document.getElementById('tx-input').value.trim().replace(/,/g, '');
             if (!txId) {
                 alert('Please enter a transaction ID');
                 return;
@@ -253,7 +291,7 @@
         }
 
         async function searchAddressTx() {
-            const address = document.getElementById('address-input').value.trim();
+            const address = document.getElementById('address-input').value.trim().replace(/,/g, '');
             if (!address) {
                 alert('Please enter an address');
                 return;
@@ -263,7 +301,7 @@
         }
 
         async function searchAddressCoins() {
-            const address = document.getElementById('address-input').value.trim();
+            const address = document.getElementById('address-input').value.trim().replace(/,/g, '');
             if (!address) {
                 alert('Please enter an address');
                 return;
@@ -273,7 +311,7 @@
         }
 
         async function searchName() {
-            const name = document.getElementById('name-input').value.trim();
+            const name = document.getElementById('name-input').value.trim().replace(/,/g, '');
             if (!name) {
                 alert('Please enter a name');
                 return;
@@ -283,7 +321,7 @@
         }
 
         async function searchNameResource() {
-            const name = document.getElementById('name-input').value.trim();
+            const name = document.getElementById('name-input').value.trim().replace(/,/g, '');
             if (!name) {
                 alert('Please enter a name');
                 return;
@@ -293,7 +331,7 @@
         }
 
         async function searchNameSummary() {
-            const name = document.getElementById('name-input').value.trim();
+            const name = document.getElementById('name-input').value.trim().replace(/,/g, '');
             if (!name) {
                 alert('Please enter a name');
                 return;
@@ -303,7 +341,7 @@
         }
 
         async function searchNameHash() {
-            const nameHash = document.getElementById('namehash-input').value.trim();
+            const nameHash = document.getElementById('namehash-input').value.trim().replace(/,/g, '');
             if (!nameHash) {
                 alert('Please enter a name hash');
                 return;
@@ -313,8 +351,8 @@
         }
 
         async function searchCoin() {
-            const coinHash = document.getElementById('coin-hash').value.trim();
-            const coinIndex = document.getElementById('coin-index').value.trim();
+            const coinHash = document.getElementById('coin-hash').value.trim().replace(/,/g, '');
+            const coinIndex = document.getElementById('coin-index').value.trim().replace(/,/g, '');
             if (!coinHash || !coinIndex) {
                 alert('Please enter both coin hash and index');
                 return;
