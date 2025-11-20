@@ -110,19 +110,6 @@
                 <div id="mempool-txs" class="mempool-txs-container"></div>
             </div>
         </section>
-
-        <!-- Coin Lookup -->
-        <section class="additional-section">
-            <div class="card">
-                <h2>Coin Lookup</h2>
-                <div class="search-box">
-                    <input type="text" id="coin-hash" placeholder="Coin hash" onkeypress="if(event.key === 'Enter') searchCoin()">
-                    <input type="text" id="coin-index" placeholder="Index" onkeypress="if(event.key === 'Enter') searchCoin()">
-                    <button onclick="searchCoin()">Get Coin Info</button>
-                </div>
-                <div id="coin-result" class="result-box"></div>
-            </div>
-        </section>
     </main>
 
     <footer>
@@ -188,11 +175,6 @@
                         searchName();
                         break;
                 }
-            } else if (parts.length === 3 && parts[0] === 'coin') {
-                // Handle coin URLs: /coin/hash/index
-                document.getElementById('coin-hash').value = parts[1];
-                document.getElementById('coin-index').value = parts[2];
-                searchCoin();
             }
         }
 
@@ -249,6 +231,14 @@
             `;
         }
 
+        // Open transaction in search tab
+        function openTx(txId) {
+            document.getElementById('tx-input').value = txId;
+            document.querySelector('[data-tab="tx"]').click();
+            searchTx();
+            document.querySelector('.search-section').scrollIntoView({ behavior: 'smooth' });
+        }
+
         // Format mempool data nicely
         function formatMempoolData(mempool) {
             // Check if mempool is an array of transaction IDs
@@ -266,7 +256,7 @@
                         ${mempool.map(txId => `
                             <div class="tx-item">
                                 <span class="tx-hash mono">${txId}</span>
-                                <button class="tx-view-btn" onclick="window.location.href='/tx/${txId}'">View</button>
+                                <button class="tx-view-btn" onclick="openTx('${txId}')">View</button>
                             </div>
                         `).join('')}
                     </div>
@@ -1114,25 +1104,6 @@
                 window.location.href = `/name/${data.result}`;
             } else {
                 resultElement.innerHTML = `<div class="error">No name found for this hash</div>`;
-            }
-        }
-
-        async function searchCoin() {
-            const coinHash = document.getElementById('coin-hash').value.trim().replace(/,/g, '');
-            const coinIndex = document.getElementById('coin-index').value.trim().replace(/,/g, '');
-            if (!coinHash || !coinIndex) {
-                alert('Please enter both coin hash and index');
-                return;
-            }
-            updateURL('coin', `${coinHash}/${coinIndex}`);
-            const data = await apiCall(`coin/${coinHash}/${coinIndex}`);
-            
-            // Use formatted display instead of raw JSON
-            const resultElement = document.getElementById('coin-result');
-            if (data.error) {
-                resultElement.innerHTML = `<div class="error">Error: ${data.error}</div>`;
-            } else {
-                resultElement.innerHTML = formatCoin(data);
             }
         }
 
