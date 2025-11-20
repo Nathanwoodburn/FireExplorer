@@ -161,7 +161,7 @@ def hip2(domain: str) -> str | None:
     # Catch all exceptions
     except Exception as e:
         print(f"Hip2: Lookup failed with error: {e}", flush=True)
-        return "Hip2: Lookup failed."
+        return
 
 
 def wallet_txt(domain: str, doh_url="https://au.hnsdoh.com/dns-query") -> str | None:
