@@ -548,16 +548,32 @@
                     <div class="tx-section">
                         <h4>Inputs (${tx.inputs.length})</h4>
                         <div class="tx-io-list">
-                            ${tx.inputs.map((input, i) => `
-                                <div class="tx-io-item">
-                                    <div class="tx-io-header">
-                                        <span class="tx-io-index">#${i}</span>
-                                        <span class="tx-io-value">${formatValue(input.coin.value)}</span>
-                                    </div>
-                                    <div class="tx-io-address">${input.coin.address}</div>
-                                    ${input.coin.covenant.action !== 'NONE' ? `<div class="tx-covenant">Covenant: ${input.coin.covenant.action}</div>` : ''}
-                                </div>
-                            `).join('')}
+                            ${tx.inputs.map((input, i) => {
+                                // Check if this is a coinbase input
+                                const isCoinbase = input.prevout && input.prevout.hash === '0000000000000000000000000000000000000000000000000000000000000000';
+                                
+                                if (isCoinbase) {
+                                    return `
+                                        <div class="tx-io-item">
+                                            <div class="tx-io-header">
+                                                <span class="tx-io-index">#${i}</span>
+                                                <span class="tx-io-value" style="color: #f7931e;">COINBASE</span>
+                                            </div>
+                                        </div>
+                                    `;
+                                } else {
+                                    return `
+                                        <div class="tx-io-item">
+                                            <div class="tx-io-header">
+                                                <span class="tx-io-index">#${i}</span>
+                                                <span class="tx-io-value">${input.coin ? formatValue(input.coin.value) : 'Unknown'}</span>
+                                            </div>
+                                            <div class="tx-io-address">${input.coin ? input.coin.address : (input.address || 'Unknown')}</div>
+                                            ${input.coin && input.coin.covenant.action !== 'NONE' ? `<div class="tx-covenant">Covenant: ${input.coin.covenant.action}</div>` : ''}
+                                        </div>
+                                    `;
+                                }
+                            }).join('')}
                         </div>
                     </div>
 
