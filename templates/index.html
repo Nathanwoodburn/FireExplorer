@@ -194,6 +194,71 @@
             `;
         }
 
+        // Format transaction data nicely
+        function formatTransactionData(tx) {
+            if (!tx || tx.error) {
+                return `<div class="error">Error: ${tx.error || 'Invalid transaction data'}</div>`;
+            }
+
+            const formatValue = (value) => (value / 1e6).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' HNS';
+            const formatRate = (value) => (value / 1e3).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' doo/vB';
+            
+            let html = `
+                <div class="tx-details">
+                    <div class="tx-section">
+                        <h4>Transaction Info</h4>
+                        <div class="info-grid">
+                            <div class="info-item full-width"><strong>Hash:</strong> <span class="mono">${tx.hash}</span></div>
+                            <div class="info-item full-width"><strong>Block:</strong> <span class="mono tx-block-hash">${tx.block || 'Unconfirmed'}</span></div>
+                            <div class="info-item"><strong>Height:</strong> ${tx.height >= 0 ? tx.height.toLocaleString() : 'Pending'}</div>
+                            <div class="info-item"><strong>Confirmations:</strong> ${tx.confirmations.toLocaleString()}</div>
+                            <div class="info-item"><strong>Fee:</strong> ${formatValue(tx.fee)}</div>
+                            <div class="info-item"><strong>Rate:</strong> ${formatRate(tx.rate)}</div>
+                        </div>
+                    </div>
+
+                    <div class="tx-section">
+                        <h4>Inputs (${tx.inputs.length})</h4>
+                        <div class="tx-io-list">
+                            ${tx.inputs.map((input, i) => `
+                                <div class="tx-io-item">
+                                    <div class="tx-io-header">
+                                        <span class="tx-io-index">#${i}</span>
+                                        <span class="tx-io-value">${formatValue(input.coin.value)}</span>
+                                    </div>
+                                    <div class="tx-io-address">${input.coin.address}</div>
+                                    <div class="tx-io-hash mono">${input.prevout.hash}:${input.prevout.index}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <div class="tx-section">
+                        <h4>Outputs (${tx.outputs.length})</h4>
+                        <div class="tx-io-list">
+                            ${tx.outputs.map((output, i) => `
+                                <div class="tx-io-item">
+                                    <div class="tx-io-header">
+                                        <span class="tx-io-index">#${i}</span>
+                                        <span class="tx-io-value">${formatValue(output.value)}</span>
+                                    </div>
+                                    <div class="tx-io-address">${output.address}</div>
+                                    ${output.covenant.action !== 'NONE' ? `<div class="tx-covenant">Covenant: ${output.covenant.action}</div>` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <div class="tx-section">
+                        <button class="secondary-btn" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">Show Raw JSON</button>
+                        <pre style="display: none;">${JSON.stringify(tx, null, 2)}</pre>
+                    </div>
+                </div>
+            `;
+            
+            return html;
+        }
+
         // View transaction details
         async function viewTransaction(txId) {
             const data = await apiCall(`tx/${txId}`);
@@ -213,7 +278,7 @@
                         <button class="tx-modal-close" onclick="this.parentElement.parentElement.parentElement.remove()">×</button>
                     </div>
                     <div class="tx-modal-body">
-                        ${data.error ? `<div class="error">Error: ${data.error}</div>` : `<pre>${JSON.stringify(data, null, 2)}</pre>`}
+                        ${data.error ? `<div class="error">Error: ${data.error}</div>` : formatTransactionData(data)}
                     </div>
                 </div>
             `;
@@ -287,7 +352,14 @@
                 return;
             }
             const data = await apiCall(`tx/${txId}`);
-            displayResult('tx-result', data);
+            
+            // Use formatted display instead of raw JSON
+            const resultElement = document.getElementById('tx-result');
+            if (data.error) {
+                resultElement.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+            } else {
+                resultElement.innerHTML = formatTransactionData(data);
+            }
         }
 
         async function searchAddressTx() {
