@@ -7,6 +7,9 @@
     <title>Fire Explorer</title>
     <link rel="icon" href="/assets/img/favicon.png" type="image/png">
     <link rel="stylesheet" href="/assets/css/index.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <meta name="description" content="A hot new Handshake Blockchain Explorer">
 
     <!-- Open Graph Meta Tags -->
@@ -30,25 +33,14 @@
 <body>
     <header>
         <div class="container">
-            <h1><img src="/assets/img/favicon.png" alt="Fire Icon" style="height: 1em; vertical-align: middle;"> Fire Explorer</h1>
-            <p class="subtitle">Handshake Blockchain Explorer</p>
+            <div class="brand">
+                <a href="/"><h1><img src="/assets/img/favicon.png" alt="Fire Icon" style="height: 1.2em; vertical-align: middle;"> Fire Explorer</h1></a>
+                <span class="subtitle">Handshake Blockchain Explorer</span>
+            </div>
         </div>
     </header>
 
     <main class="container">
-        <!-- Status Cards -->
-        <section class="status-section">
-            <div class="card status-card">
-                <h3>Chain Info</h3>
-                <div id="chain-status" class="status-content">Loading...</div>
-            </div>
-            <div class="card status-card">
-                <h3>Mempool</h3>
-                <div id="mempool-status" class="status-content">Loading...</div>
-                <div id="mempool-txs" class="mempool-txs-container"></div>
-            </div>
-        </section>
-
         <!-- Search Section -->
         <section class="search-section">
             <div class="card">
@@ -86,6 +78,9 @@
                         <button onclick="searchAddressTx()">Get Transactions</button>
                         <button onclick="searchAddressCoins()">Get Coins</button>
                     </div>
+                    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: -0.5rem; margin-bottom: 1.5rem; padding-left: 0.5rem;">
+                        <span style="color: var(--accent-color);">Tip:</span> Use <span class="mono" style="color: var(--text-primary);">@name</span> to search via HIP02 alias
+                    </p>
                     <div id="address-result" class="result-box"></div>
                 </div>
 
@@ -106,16 +101,16 @@
             </div>
         </section>
 
-        <!-- Coin Lookup -->
-        <section class="additional-section">
-            <div class="card">
-                <h2>Coin Lookup</h2>
-                <div class="search-box">
-                    <input type="text" id="coin-hash" placeholder="Coin hash" onkeypress="if(event.key === 'Enter') searchCoin()">
-                    <input type="text" id="coin-index" placeholder="Index" onkeypress="if(event.key === 'Enter') searchCoin()">
-                    <button onclick="searchCoin()">Get Coin Info</button>
-                </div>
-                <div id="coin-result" class="result-box"></div>
+        <!-- Status Cards -->
+        <section class="status-section">
+            <div class="card status-card">
+                <h3>Chain Info</h3>
+                <div id="chain-status" class="status-content">Loading...</div>
+            </div>
+            <div class="card status-card">
+                <h3>Mempool</h3>
+                <div id="mempool-status" class="status-content">Loading...</div>
+                <div id="mempool-txs" class="mempool-txs-container"></div>
             </div>
         </section>
     </main>
@@ -183,11 +178,6 @@
                         searchName();
                         break;
                 }
-            } else if (parts.length === 3 && parts[0] === 'coin') {
-                // Handle coin URLs: /coin/hash/index
-                document.getElementById('coin-hash').value = parts[1];
-                document.getElementById('coin-index').value = parts[2];
-                searchCoin();
             }
         }
 
@@ -228,6 +218,21 @@
             }
         }
 
+        // Resolve HIP02 alias
+        async function resolveHip02(input) {
+            if (!input.startsWith('@')) return { success: true, address: input };
+            
+            const name = input.substring(1);
+            try {
+                // Try HTTPS first
+                const response = await fetch(`/api/v1/hip02/${name}`);
+                const data = await response.json();
+                return data;
+            } catch (e) {
+                    return { success: false, error: 'Failed to resolve HIP02 alias. ' + e.message };
+            }
+        }
+
         // Format chain data nicely
         function formatChainData(chain) {
             return `
@@ -242,6 +247,13 @@
                     <div class="info-item full-width"><strong>Tree Root:</strong> <span class="mono">${chain.treeRoot}</span></div>
                 </div>
             `;
+        }
+
+        // Open transaction in search tab
+        function openTx(txId) {
+            document.getElementById('tx-input').value = txId;
+            document.querySelector('[data-tab="tx"]').click();
+            searchTx();
         }
 
         // Format mempool data nicely
@@ -259,9 +271,8 @@
                     </div>
                     <div class="tx-list">
                         ${mempool.map(txId => `
-                            <div class="tx-item">
+                            <div class="tx-item" onclick="openTx('${txId}')">
                                 <span class="tx-hash mono">${txId}</span>
-                                <button class="tx-view-btn" onclick="window.location.href='/tx/${txId}'">View</button>
                             </div>
                         `).join('')}
                     </div>
@@ -929,6 +940,18 @@
             }
         }
 
+        // Show loading animation
+        function showLoading(elementId) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.innerHTML = `
+                <div class="loading-container">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">Lighing Fire...</div>
+                </div>
+            `;
+        }
+
         // Load status on page load
         async function loadStatus() {
             const chainStatus = await apiCall('chain');
@@ -953,6 +976,8 @@
                 alert('Please enter a block height or hash');
                 return;
             }
+            
+            showLoading('block-result');
             updateURL('block', blockId);
             const data = await apiCall(`block/${blockId}`);
             
@@ -971,6 +996,8 @@
                 alert('Please enter a block height or hash');
                 return;
             }
+            
+            showLoading('block-result');
             updateURL('header', blockId);
             const data = await apiCall(`header/${blockId}`);
             
@@ -989,11 +1016,17 @@
                 alert('Please enter a transaction ID');
                 return;
             }
+            
+            const resultElement = document.getElementById('tx-result');
+            showLoading('tx-result');
+            
+            // Scroll to the search section
+            document.querySelector('.search-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
             updateURL('tx', txId);
             const data = await apiCall(`tx/${txId}`);
             
             // Use formatted display instead of raw JSON
-            const resultElement = document.getElementById('tx-result');
             if (data.error) {
                 resultElement.innerHTML = `<div class="error">Error: ${data.error}</div>`;
             } else {
@@ -1002,16 +1035,39 @@
         }
 
         async function searchAddressTx() {
-            const address = document.getElementById('address-input').value.trim().replace(/,/g, '');
+            let address = document.getElementById('address-input').value.trim().replace(/,/g, '');
             if (!address) {
                 alert('Please enter an address');
                 return;
             }
+            
+            showLoading('address-result');
+            const resultElement = document.getElementById('address-result');
+
+            // Check for HIP02 alias
+            if (address.startsWith('@')) {
+                const hip02Result = await resolveHip02(address);
+                if (hip02Result.success && hip02Result.address) {
+                    address = hip02Result.address;
+                    // Update input to show resolved address
+                    document.getElementById('address-input').value = address;
+                    // Add a note about resolution
+                    const note = document.createElement('div');
+                    note.className = 'success-message';
+                    note.style.marginBottom = '1rem';
+                    note.innerHTML = `Resolved alias <strong>${hip02Result.name || address}</strong> to address`;
+                    resultElement.parentNode.insertBefore(note, resultElement);
+                    setTimeout(() => note.remove(), 5000);
+                } else {
+                    resultElement.innerHTML = `<div class="error">HIP02 Error: ${hip02Result.error || 'Could not resolve alias'}</div>`;
+                    return;
+                }
+            }
+
             updateURL('address', address);
             const data = await apiCall(`tx/address/${address}`);
             
             // Use formatted display instead of raw JSON
-            const resultElement = document.getElementById('address-result');
             if (data.error) {
                 resultElement.innerHTML = `<div class="error">Error: ${data.error}</div>`;
             } else {
@@ -1020,16 +1076,32 @@
         }
 
         async function searchAddressCoins() {
-            const address = document.getElementById('address-input').value.trim().replace(/,/g, '');
+            let address = document.getElementById('address-input').value.trim().replace(/,/g, '');
             if (!address) {
                 alert('Please enter an address');
                 return;
             }
+            
+            showLoading('address-result');
+            const resultElement = document.getElementById('address-result');
+
+            // Check for HIP02 alias
+            if (address.startsWith('@')) {
+                const hip02Result = await resolveHip02(address);
+                if (hip02Result.success && hip02Result.address) {
+                    address = hip02Result.address;
+                    // Update input to show resolved address
+                    document.getElementById('address-input').value = address;
+                } else {
+                    resultElement.innerHTML = `<div class="error">HIP02 Error: ${hip02Result.error || 'Could not resolve alias'}</div>`;
+                    return;
+                }
+            }
+
             updateURL('address', address);
             const data = await apiCall(`coin/address/${address}`);
             
             // Use formatted display instead of raw JSON
-            const resultElement = document.getElementById('address-result');
             if (data.error) {
                 resultElement.innerHTML = `<div class="error">Error: ${data.error}</div>`;
             } else {
@@ -1043,6 +1115,8 @@
                 alert('Please enter a name');
                 return;
             }
+            
+            showLoading('name-result');
             const punyName = toPunycode(name);
             updateURL('name', punyName);
             const data = await apiCall(`name/${punyName}`);
@@ -1062,6 +1136,8 @@
                 alert('Please enter a name');
                 return;
             }
+            
+            showLoading('name-result');
             const punyName = toPunycode(name);
             const data = await apiCall(`nameresource/${punyName}`);
             
@@ -1080,6 +1156,8 @@
                 alert('Please enter a name');
                 return;
             }
+            
+            showLoading('name-result');
             const punyName = toPunycode(name);
             const data = await apiCall(`namesummary/${punyName}`);
             
@@ -1098,6 +1176,8 @@
                 alert('Please enter a name hash');
                 return;
             }
+            
+            showLoading('name-result');
             const data = await apiCall(`namehash/${nameHash}`);
             
             // Check if result is valid and redirect to name page
@@ -1109,25 +1189,6 @@
                 window.location.href = `/name/${data.result}`;
             } else {
                 resultElement.innerHTML = `<div class="error">No name found for this hash</div>`;
-            }
-        }
-
-        async function searchCoin() {
-            const coinHash = document.getElementById('coin-hash').value.trim().replace(/,/g, '');
-            const coinIndex = document.getElementById('coin-index').value.trim().replace(/,/g, '');
-            if (!coinHash || !coinIndex) {
-                alert('Please enter both coin hash and index');
-                return;
-            }
-            updateURL('coin', `${coinHash}/${coinIndex}`);
-            const data = await apiCall(`coin/${coinHash}/${coinIndex}`);
-            
-            // Use formatted display instead of raw JSON
-            const resultElement = document.getElementById('coin-result');
-            if (data.error) {
-                resultElement.innerHTML = `<div class="error">Error: ${data.error}</div>`;
-            } else {
-                resultElement.innerHTML = formatCoin(data);
             }
         }
 

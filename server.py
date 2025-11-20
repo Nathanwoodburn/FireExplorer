@@ -4,11 +4,13 @@ from flask import (
     render_template,
     send_from_directory,
     send_file,
+    jsonify,
 )
 import os
 import requests
 from datetime import datetime
 import dotenv
+from tools import hip2, wallet_txt
 
 dotenv.load_dotenv()
 
@@ -133,11 +135,42 @@ def catch_all(path: str):
 
 @app.route("/api/v1/status")
 def api_status():
-    return {
-        "status": "ok",
-        "service": "FireExplorer",
-        "version": "1.0.0",
-    }
+    return jsonify(
+        {
+            "status": "ok",
+            "service": "FireExplorer",
+            "version": "1.0.0",
+        }
+    )
+
+
+@app.route("/api/v1/hip02/<domain>")
+def hip02(domain: str):
+    hip2_record = hip2(domain)
+    if hip2_record:
+        return jsonify(
+            {
+                "success": True,
+                "address": hip2_record,
+                "method": "hip02",
+            }
+        )
+
+    wallet_record = wallet_txt(domain)
+    if wallet_record:
+        return jsonify(
+            {
+                "success": True,
+                "address": wallet_record,
+                "method": "wallet_txt",
+            }
+        )
+    return jsonify(
+        {
+            "success": False,
+            "error": "No HIP02 or WALLET record found for this domain",
+        }
+    )
 
 
 # endregion
