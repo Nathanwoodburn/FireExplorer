@@ -239,6 +239,68 @@
             `;
         }
 
+        // Format block data nicely
+        function formatBlockData(block) {
+            if (!block || block.error) {
+                return `<div class="error">Error: ${block.error || 'Invalid block data'}</div>`;
+            }
+
+            const formatValue = (value) => (value / 1e6).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' HNS';
+            const formatTime = (timestamp) => new Date(timestamp * 1000).toLocaleString();
+            
+            let html = `
+                <div class="tx-details">
+                    <div class="tx-section">
+                        <h4>Block Info</h4>
+                        <div class="info-grid">
+                            <div class="info-item full-width"><strong>Hash:</strong> <span class="mono">${block.hash}</span></div>
+                            <div class="info-item"><strong>Height:</strong> ${block.height.toLocaleString()}</div>
+                            <div class="info-item"><strong>Confirmations:</strong> ${block.depth.toLocaleString()}</div>
+                            <div class="info-item"><strong>Time:</strong> ${formatTime(block.time)}</div>
+                            <div class="info-item"><strong>Transactions:</strong> ${block.txs.length.toLocaleString()}</div>
+                            <div class="info-item full-width"><strong>Previous Block:</strong> <span class="mono">${block.prevBlock}</span></div>
+                            <div class="info-item full-width"><strong>Merkle Root:</strong> <span class="mono">${block.merkleRoot}</span></div>
+                            <div class="info-item full-width"><strong>Witness Root:</strong> <span class="mono">${block.witnessRoot}</span></div>
+                            <div class="info-item full-width"><strong>Tree Root:</strong> <span class="mono">${block.treeRoot}</span></div>
+                            <div class="info-item"><strong>Version:</strong> ${block.version}</div>
+                            <div class="info-item"><strong>Bits:</strong> ${block.bits}</div>
+                            <div class="info-item"><strong>Nonce:</strong> ${block.nonce.toLocaleString()}</div>
+                        </div>
+                    </div>
+
+                    <div class="tx-section">
+                        <h4>Transactions (${block.txs.length})</h4>
+                        <div class="tx-io-list">
+                            ${block.txs.map((tx, i) => {
+                                const totalOutput = tx.outputs.reduce((sum, out) => sum + out.value, 0);
+                                return `
+                                    <div class="tx-io-item" style="cursor: pointer;" onclick="window.location.href='/tx/${tx.hash}'">
+                                        <div class="tx-io-header">
+                                            <span class="tx-io-index">#${i}</span>
+                                            <span class="tx-io-value">${formatValue(totalOutput)}</span>
+                                        </div>
+                                        <div class="tx-io-hash mono">${tx.hash}</div>
+                                        <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; font-size: 0.85rem; color: #b0b0b0;">
+                                            <span>${tx.inputs.length} input${tx.inputs.length !== 1 ? 's' : ''}</span>
+                                            <span>${tx.outputs.length} output${tx.outputs.length !== 1 ? 's' : ''}</span>
+                                            <span>Fee: ${formatValue(tx.fee)}</span>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+
+                    <div class="tx-section">
+                        <button class="secondary-btn" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">Show Raw JSON</button>
+                        <pre style="display: none;">${JSON.stringify(block, null, 2)}</pre>
+                    </div>
+                </div>
+            `;
+            
+            return html;
+        }
+
         // Format transaction data nicely
         function formatTransactionData(tx) {
             if (!tx || tx.error) {
@@ -378,7 +440,14 @@
             }
             updateURL('block', blockId);
             const data = await apiCall(`block/${blockId}`);
-            displayResult('block-result', data);
+            
+            // Use formatted display instead of raw JSON
+            const resultElement = document.getElementById('block-result');
+            if (data.error) {
+                resultElement.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+            } else {
+                resultElement.innerHTML = formatBlockData(data);
+            }
         }
 
         async function searchHeader() {
