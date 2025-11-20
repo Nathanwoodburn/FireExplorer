@@ -619,10 +619,15 @@
 
                     <div class="tx-section">
                         <h4>Owner</h4>
-                        <div style="cursor: pointer; padding: 1rem; background: rgba(255, 107, 53, 0.1); border-radius: 8px;" onclick="window.location.href='/tx/${info.owner.hash}'">
+                        ${ info.owner.hash == '0000000000000000000000000000000000000000000000000000000000000000' ? `
+                            <div style="padding: 1rem; background: rgba(255, 107, 53, 0.1); border-radius: 8px;">
+                                <div class="mono" style="word-break: break-all; color: #ff6b35;">This name is unowned</div>
+                            </div>
+                        ` : `<div style="cursor: pointer; padding: 1rem; background: rgba(255, 107, 53, 0.1); border-radius: 8px;" onclick="window.location.href='/tx/${info.owner.hash}'">
                             <div class="mono" style="word-break: break-all; color: #ff6b35;">TX: ${info.owner.hash}</div>
                             <div style="color: #b0b0b0; margin-top: 0.5rem;">Output Index: ${info.owner.index}</div>
                         </div>
+                        `}
                     </div>
 
                     <div class="tx-section">
