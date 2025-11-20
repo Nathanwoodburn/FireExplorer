@@ -2,7 +2,6 @@ from flask import (
     Flask,
     make_response,
     request,
-    jsonify,
     render_template,
     send_from_directory,
     send_file,
@@ -105,32 +104,6 @@ def catch_all(path: str):
 # endregion
 
 
-# region API routes
-
-api_requests = 0
-
-
-@app.route("/api/v1/data", methods=["GET"])
-def api_data():
-    """
-    Example API endpoint that returns some data.
-    You can modify this to return whatever data you need.
-    """
-
-    global api_requests
-    api_requests += 1
-
-    data = {
-        "header": "Sample API Response",
-        "content": f"Hello, this is a sample API response! You have called this endpoint {api_requests} times.",
-        "timestamp": datetime.now().isoformat(),
-    }
-    return jsonify(data)
-
-
-# endregion
-
-
 # region Error Catching
 # 404 catch all
 @app.errorhandler(404)
@@ -140,4 +113,4 @@ def not_found(e):
 
 # endregion
 if __name__ == "__main__":
-    app.run(debug=True, port=5000, host="0.0.0.0")
+    app.run(debug=True, port=5000, host="127.0.0.1")

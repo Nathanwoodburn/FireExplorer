@@ -4,57 +4,331 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nathan.Woodburn/</title>
+    <title>Fire Explorer - Handshake Blockchain Explorer</title>
     <link rel="icon" href="/assets/img/favicon.png" type="image/png">
     <link rel="stylesheet" href="/assets/css/index.css">
 </head>
 
 <body>
-    <div class="spacer"></div>
-    <div class="centre">
-        <h1>Nathan.Woodburn/</h1>
-        <span>The current date and time is {{datetime}}</span>
-    </div>
+    <header>
+        <div class="container">
+            <h1><img src="/assets/img/favicon.png" alt="Fire Icon" style="height: 1em; vertical-align: middle;"> Fire Explorer</h1>
+            <p class="subtitle">Handshake Blockchain Explorer</p>
+        </div>
+    </header>
 
-    <div class="spacer"></div>
-    <div class="centre">
-        <h2 id="test-content-header">Pulling data</h2>
-        <span class="test-content">This is a test content area that will be updated with data from the server.</span>
-        <br>
-        <br>
-        <span class="test-content-timestamp">Timestamp: Waiting to pull data</span>
-    </div>
+    <main class="container">
+        <!-- Status Cards -->
+        <section class="status-section">
+            <div class="card status-card">
+                <h3>Node Status</h3>
+                <div id="node-status" class="status-content">Loading...</div>
+            </div>
+            <div class="card status-card">
+                <h3>Chain Info</h3>
+                <div id="chain-status" class="status-content">Loading...</div>
+            </div>
+            <div class="card status-card">
+                <h3>Mempool</h3>
+                <div id="mempool-status" class="status-content">Loading...</div>
+            </div>
+        </section>
+
+        <!-- Search Section -->
+        <section class="search-section">
+            <div class="card">
+                <h2>Search Blockchain</h2>
+                <div class="search-tabs">
+                    <button class="tab-btn active" data-tab="block">Block</button>
+                    <button class="tab-btn" data-tab="tx">Transaction</button>
+                    <button class="tab-btn" data-tab="address">Address</button>
+                    <button class="tab-btn" data-tab="name">Name</button>
+                </div>
+
+                <!-- Block Search -->
+                <div class="tab-content active" id="block-tab">
+                    <div class="search-box">
+                        <input type="text" id="block-input" placeholder="Enter block height or hash">
+                        <button onclick="searchBlock()">Search Block</button>
+                        <button onclick="searchHeader()">Get Header</button>
+                    </div>
+                    <div id="block-result" class="result-box"></div>
+                </div>
+
+                <!-- Transaction Search -->
+                <div class="tab-content" id="tx-tab">
+                    <div class="search-box">
+                        <input type="text" id="tx-input" placeholder="Enter transaction ID">
+                        <button onclick="searchTx()">Search Transaction</button>
+                    </div>
+                    <div id="tx-result" class="result-box"></div>
+                </div>
+
+                <!-- Address Search -->
+                <div class="tab-content" id="address-tab">
+                    <div class="search-box">
+                        <input type="text" id="address-input" placeholder="Enter Handshake address">
+                        <button onclick="searchAddressTx()">Get Transactions</button>
+                        <button onclick="searchAddressCoins()">Get Coins</button>
+                    </div>
+                    <div id="address-result" class="result-box"></div>
+                </div>
+
+                <!-- Name Search -->
+                <div class="tab-content" id="name-tab">
+                    <div class="search-box">
+                        <input type="text" id="name-input" placeholder="Enter Handshake name">
+                        <button onclick="searchName()">Name Info</button>
+                        <button onclick="searchNameResource()">Get Resource</button>
+                        <button onclick="searchNameSummary()">Get Summary</button>
+                    </div>
+                    <div class="search-box">
+                        <input type="text" id="namehash-input" placeholder="Enter name hash">
+                        <button onclick="searchNameHash()">Search by Hash</button>
+                    </div>
+                    <div id="name-result" class="result-box"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Coin Lookup -->
+        <section class="additional-section">
+            <div class="card">
+                <h2>Coin Lookup</h2>
+                <div class="search-box">
+                    <input type="text" id="coin-hash" placeholder="Coin hash">
+                    <input type="text" id="coin-index" placeholder="Index">
+                    <button onclick="searchCoin()">Get Coin Info</button>
+                </div>
+                <div id="coin-result" class="result-box"></div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>Fire Explorer - Handshake Blockchain Explorer | Powered by <a href="https://hns.au" target="_blank">HNSAU</a> & <a href="https://hsd.hns.au" target="_blank">Fire HSD</a></p>
+            <p class="timestamp">Last updated: {{ datetime }}</p>
+        </div>
+    </footer>
 
     <script>
-        function fetchData() {
-            // Fetch the data from the server
-            fetch('/api/v1/data')
-                .then(response => response.json())
-                .then(data => {
-                    // Get the data header element
-                    const dataHeader = document.getElementById('test-content-header');
-                    // Update the header with the fetched data
-                    dataHeader.textContent = data.header;
-                    // Get the test content element
-                    const testContent = document.querySelector('.test-content');
-                    // Update the content with the fetched data
-                    testContent.textContent = data.content;
+        // Tab switching
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tab = btn.dataset.tab;
+                
+                // Update active tab button
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                
+                // Update active tab content
+                document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+                document.getElementById(tab + '-tab').classList.add('active');
+            });
+        });
 
-                    // Get the timestamp element
-                    const timestampElement = document.querySelector('.test-content-timestamp');
-                    // Update the timestamp with the fetched data
-                    timestampElement.textContent = `Timestamp: ${data.timestamp}`;
-                })
-                .catch(error => console.error('Error fetching data:', error));
+        // API call helper
+        async function apiCall(endpoint) {
+            try {
+                const response = await fetch(`https://hsd.hns.au/api/v1/${endpoint}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return await response.json();
+            } catch (error) {
+                return { error: error.message };
+            }
         }
 
-        // Initial fetch after 2 seconds
-        setTimeout(fetchData, 2000);
-        
-        // Then fetch every 2 seconds
-        setInterval(fetchData, 2000);
-    </script>
+        // Format chain data nicely
+        function formatChainData(chain) {
+            return `
+                <div class="info-grid">
+                    <div class="info-item"><strong>Height:</strong> ${chain.height.toLocaleString()}</div>
+                    <div class="info-item"><strong>Progress:</strong> ${(chain.progress * 100).toFixed(2)}%</div>
+                    <div class="info-item"><strong>TX Count:</strong> ${chain.state.tx.toLocaleString()}</div>
+                    <div class="info-item"><strong>Coins:</strong> ${chain.state.coin.toLocaleString()}</div>
+                    <div class="info-item"><strong>Value:</strong> ${(chain.state.value / 1e6).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} HNS</div>
+                    <div class="info-item"><strong>Burned:</strong> ${(chain.state.burned / 1e6).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} HNS</div>
+                    <div class="info-item full-width"><strong>Tip:</strong> <span class="mono">${chain.tip}</span></div>
+                    <div class="info-item full-width"><strong>Tree Root:</strong> <span class="mono">${chain.treeRoot}</span></div>
+                </div>
+            `;
+        }
 
+        // Format mempool data nicely
+        function formatMempoolData(mempool) {
+            // Check if mempool is an array of transaction IDs
+            if (Array.isArray(mempool)) {
+                return `
+                    <div class="info-grid">
+                        <div class="info-item"><strong>Transactions:</strong> ${mempool.length.toLocaleString()}</div>
+                        <div class="info-item no-border">
+                            <a href="/mempool" class="view-all-btn">View All Transactions</a>
+                        </div>
+                    </div>
+                `;
+            }
+            // Fallback for object format
+            return `
+                <div class="info-grid">
+                    <div class="info-item"><strong>Transactions:</strong> ${mempool.tx || 0}</div>
+                    <div class="info-item"><strong>Size:</strong> ${mempool.size ? (mempool.size / 1024).toFixed(2) + ' KB' : '0 KB'}</div>
+                    <div class="info-item"><strong>Orphans:</strong> ${mempool.orphans || 0}</div>
+                    <div class="info-item"><strong>Claims:</strong> ${mempool.claims || 0}</div>
+                    <div class="info-item"><strong>Airdrops:</strong> ${mempool.airdrops || 0}</div>
+                </div>
+            `;
+        }
+
+        // Display helper
+        function displayResult(elementId, data, key = null) {
+            const element = document.getElementById(elementId);
+            if (data.error) {
+                element.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+            } else {
+                if (key && data[key] !== undefined) {
+                    // If the value is a simple string, display it without JSON formatting
+                    if (typeof data[key] === 'string') {
+                        element.innerHTML = `<pre>${data[key]}</pre>`;
+                    } else {
+                        element.innerHTML = `<pre>${JSON.stringify(data[key], null, 2)}</pre>`;
+                    }
+                    return;
+                }
+                element.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            }
+        }
+
+        // Load status on page load
+        async function loadStatus() {
+            const nodeStatus = await apiCall('status');
+            displayResult('node-status', nodeStatus, 'status');
+
+            const chainStatus = await apiCall('chain');
+            if (chainStatus.chain) {
+                document.getElementById('chain-status').innerHTML = formatChainData(chainStatus.chain);
+            } else {
+                displayResult('chain-status', chainStatus);
+            }
+
+            const mempoolStatus = await apiCall('mempool');
+            if (mempoolStatus && !mempoolStatus.error) {
+                document.getElementById('mempool-status').innerHTML = formatMempoolData(mempoolStatus);
+            } else {
+                displayResult('mempool-status', mempoolStatus);
+            }
+        }
+
+        // Search functions
+        async function searchBlock() {
+            const blockId = document.getElementById('block-input').value.trim();
+            if (!blockId) {
+                alert('Please enter a block height or hash');
+                return;
+            }
+            const data = await apiCall(`block/${blockId}`);
+            displayResult('block-result', data);
+        }
+
+        async function searchHeader() {
+            const blockId = document.getElementById('block-input').value.trim();
+            if (!blockId) {
+                alert('Please enter a block height or hash');
+                return;
+            }
+            const data = await apiCall(`header/${blockId}`);
+            displayResult('block-result', data);
+        }
+
+        async function searchTx() {
+            const txId = document.getElementById('tx-input').value.trim();
+            if (!txId) {
+                alert('Please enter a transaction ID');
+                return;
+            }
+            const data = await apiCall(`tx/${txId}`);
+            displayResult('tx-result', data);
+        }
+
+        async function searchAddressTx() {
+            const address = document.getElementById('address-input').value.trim();
+            if (!address) {
+                alert('Please enter an address');
+                return;
+            }
+            const data = await apiCall(`tx/address/${address}`);
+            displayResult('address-result', data);
+        }
+
+        async function searchAddressCoins() {
+            const address = document.getElementById('address-input').value.trim();
+            if (!address) {
+                alert('Please enter an address');
+                return;
+            }
+            const data = await apiCall(`coin/address/${address}`);
+            displayResult('address-result', data);
+        }
+
+        async function searchName() {
+            const name = document.getElementById('name-input').value.trim();
+            if (!name) {
+                alert('Please enter a name');
+                return;
+            }
+            const data = await apiCall(`name/${name}`);
+            displayResult('name-result', data);
+        }
+
+        async function searchNameResource() {
+            const name = document.getElementById('name-input').value.trim();
+            if (!name) {
+                alert('Please enter a name');
+                return;
+            }
+            const data = await apiCall(`nameresource/${name}`);
+            displayResult('name-result', data);
+        }
+
+        async function searchNameSummary() {
+            const name = document.getElementById('name-input').value.trim();
+            if (!name) {
+                alert('Please enter a name');
+                return;
+            }
+            const data = await apiCall(`namesummary/${name}`);
+            displayResult('name-result', data);
+        }
+
+        async function searchNameHash() {
+            const nameHash = document.getElementById('namehash-input').value.trim();
+            if (!nameHash) {
+                alert('Please enter a name hash');
+                return;
+            }
+            const data = await apiCall(`namehash/${nameHash}`);
+            displayResult('name-result', data);
+        }
+
+        async function searchCoin() {
+            const coinHash = document.getElementById('coin-hash').value.trim();
+            const coinIndex = document.getElementById('coin-index').value.trim();
+            if (!coinHash || !coinIndex) {
+                alert('Please enter both coin hash and index');
+                return;
+            }
+            const data = await apiCall(`coin/${coinHash}/${coinIndex}`);
+            displayResult('coin-result', data);
+        }
+
+        // Load status when page loads
+        window.addEventListener('load', loadStatus);
+
+        // Refresh status every 30 seconds
+        setInterval(loadStatus, 30000);
+    </script>
 </body>
 
 </html>
