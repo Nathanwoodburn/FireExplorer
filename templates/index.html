@@ -227,7 +227,7 @@
                                         <span class="tx-io-value">${formatValue(input.coin.value)}</span>
                                     </div>
                                     <div class="tx-io-address">${input.coin.address}</div>
-                                    <div class="tx-io-hash mono">${input.prevout.hash}:${input.prevout.index}</div>
+                                    ${input.coin.covenant.action !== 'NONE' ? `<div class="tx-covenant">Covenant: ${input.coin.covenant.action}</div>` : ''}
                                 </div>
                             `).join('')}
                         </div>
