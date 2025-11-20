@@ -558,7 +558,7 @@
                             <div class="info-item"><strong>Value:</strong> ${formatValue(info.value)}</div>
                             <div class="info-item"><strong>Highest Bid:</strong> ${formatValue(info.highest)}</div>
                             <div class="info-item"><strong>Renewals:</strong> ${info.renewals}</div>
-                            <div class="info-item"><strong>Next Renewal:</strong> Height ${info.renewal.toLocaleString()}</div>
+                            <div class="info-item"><strong>Expiry Block:</strong> ${info.stats.renewalPeriodEnd.toLocaleString()}</div>
                             <div class="info-item"><strong>Expired:</strong> ${info.expired ? 'Yes' : 'No'}</div>
                             <div class="info-item"><strong>Revoked:</strong> ${info.revoked > 0 ? 'Yes' : 'No'}</div>
                             <div class="info-item"><strong>Weak:</strong> ${info.weak ? 'Yes' : 'No'}</div>
