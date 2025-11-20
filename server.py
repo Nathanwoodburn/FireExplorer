@@ -131,6 +131,15 @@ def catch_all(path: str):
     return render_template("404.html"), 404
 
 
+@app.route("/api/v1/status")
+def api_status():
+    return {
+        "status": "ok",
+        "service": "FireExplorer",
+        "version": "1.0.0",
+    }
+
+
 # endregion
 
 
