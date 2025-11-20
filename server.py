@@ -1,7 +1,6 @@
 from flask import (
     Flask,
     make_response,
-    request,
     render_template,
     send_from_directory,
     send_file,
@@ -70,11 +69,30 @@ def wellknown(path):
 # region Main routes
 @app.route("/")
 def index():
-    # Print the IP address of the requester
-    print(f"Request from IP: {request.remote_addr}")
-    # And the headers
-    print(f"Request headers: {request.headers}")
-    # Get current time in the format "dd MMM YYYY hh:mm AM/PM"
+    current_datetime = datetime.now().strftime("%d %b %Y %I:%M %p")
+    return render_template("index.html", datetime=current_datetime)
+
+
+@app.route("/tx/<path:tx_hash>")
+def tx_route(tx_hash):
+    current_datetime = datetime.now().strftime("%d %b %Y %I:%M %p")
+    return render_template("index.html", datetime=current_datetime)
+
+
+@app.route("/block/<path:block_id>")
+def block_route(block_id):
+    current_datetime = datetime.now().strftime("%d %b %Y %I:%M %p")
+    return render_template("index.html", datetime=current_datetime)
+
+
+@app.route("/address/<path:address>")
+def address_route(address):
+    current_datetime = datetime.now().strftime("%d %b %Y %I:%M %p")
+    return render_template("index.html", datetime=current_datetime)
+
+
+@app.route("/name/<path:name>")
+def name_route(name):
     current_datetime = datetime.now().strftime("%d %b %Y %I:%M %p")
     return render_template("index.html", datetime=current_datetime)
 

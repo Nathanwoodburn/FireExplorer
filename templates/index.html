@@ -129,6 +129,51 @@
             });
         });
 
+        // URL routing and history management
+        function updateURL(type, value) {
+            const url = `/${type}/${value}`;
+            window.history.pushState({type, value}, '', url);
+        }
+
+        function handleRoute() {
+            const path = window.location.pathname;
+            const parts = path.split('/').filter(p => p);
+            
+            if (parts.length === 2) {
+                const [type, value] = parts;
+                
+                switch(type) {
+                    case 'block':
+                        document.getElementById('block-input').value = value;
+                        document.querySelector('[data-tab="block"]').click();
+                        searchBlock();
+                        break;
+                    case 'tx':
+                        document.getElementById('tx-input').value = value;
+                        document.querySelector('[data-tab="tx"]').click();
+                        searchTx();
+                        break;
+                    case 'address':
+                        document.getElementById('address-input').value = value;
+                        document.querySelector('[data-tab="address"]').click();
+                        searchAddressTx();
+                        break;
+                    case 'name':
+                        document.getElementById('name-input').value = value;
+                        document.querySelector('[data-tab="name"]').click();
+                        searchName();
+                        break;
+                }
+            }
+        }
+
+        // Handle browser back/forward
+        window.addEventListener('popstate', (e) => {
+            if (e.state) {
+                handleRoute();
+            }
+        });
+
         // API call helper
         async function apiCall(endpoint) {
             try {
@@ -175,7 +220,7 @@
                         ${mempool.map(txId => `
                             <div class="tx-item">
                                 <span class="tx-hash mono">${txId}</span>
-                                <button class="tx-view-btn" onclick="viewTransaction('${txId}')">View</button>
+                                <button class="tx-view-btn" onclick="window.location.href='/tx/${txId}'">View</button>
                             </div>
                         `).join('')}
                     </div>
@@ -331,6 +376,7 @@
                 alert('Please enter a block height or hash');
                 return;
             }
+            updateURL('block', blockId);
             const data = await apiCall(`block/${blockId}`);
             displayResult('block-result', data);
         }
@@ -351,6 +397,7 @@
                 alert('Please enter a transaction ID');
                 return;
             }
+            updateURL('tx', txId);
             const data = await apiCall(`tx/${txId}`);
             
             // Use formatted display instead of raw JSON
@@ -368,6 +415,7 @@
                 alert('Please enter an address');
                 return;
             }
+            updateURL('address', address);
             const data = await apiCall(`tx/address/${address}`);
             displayResult('address-result', data);
         }
@@ -388,6 +436,7 @@
                 alert('Please enter a name');
                 return;
             }
+            updateURL('name', name);
             const data = await apiCall(`name/${name}`);
             displayResult('name-result', data);
         }
@@ -434,7 +483,10 @@
         }
 
         // Load status when page loads
-        window.addEventListener('load', loadStatus);
+        window.addEventListener('load', () => {
+            loadStatus();
+            handleRoute();
+        });
 
         // Refresh status every 30 seconds
         setInterval(loadStatus, 30000);
