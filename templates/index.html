@@ -547,6 +547,11 @@
             const formatValue = (value) => (value / 1e6).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' HNS';
             const formatDate = (timestamp) => new Date(timestamp * 1000).toLocaleString();
             
+            // If name doesn't exist (no info), show error
+            if (!info) {
+                return `<div class="error">Name not found</div>`;
+            }
+
             let html = `
                 <div class="tx-details">
                     <div class="tx-section">
@@ -558,7 +563,10 @@
                             <div class="info-item"><strong>Value:</strong> ${formatValue(info.value)}</div>
                             <div class="info-item"><strong>Highest Bid:</strong> ${formatValue(info.highest)}</div>
                             <div class="info-item"><strong>Renewals:</strong> ${info.renewals}</div>
-                            <div class="info-item"><strong>Expiry Block:</strong> ${info.stats.renewalPeriodEnd.toLocaleString()}</div>
+                            ${info.stats.renewalPeriodEnd ? `
+                                <div class="info-item"><strong>Expiry Block:</strong> ${info.stats.renewalPeriodEnd.toLocaleString()}</div>
+                            ` : ''}
+                            
                             <div class="info-item"><strong>Expired:</strong> ${info.expired ? 'Yes' : 'No'}</div>
                             <div class="info-item"><strong>Revoked:</strong> ${info.revoked > 0 ? 'Yes' : 'No'}</div>
                             <div class="info-item"><strong>Weak:</strong> ${info.weak ? 'Yes' : 'No'}</div>
@@ -567,12 +575,27 @@
 
                     ${info.stats ? `
                         <div class="tx-section">
-                            <h4>Expiration Info</h4>
+                            <h4>Additional Info</h4>
                             <div class="info-grid">
-                                <div class="info-item"><strong>Blocks Until Expire:</strong> ${info.stats.blocksUntilExpire.toLocaleString()}</div>
-                                <div class="info-item"><strong>Days Until Expire:</strong> ${info.stats.daysUntilExpire.toFixed(2)}</div>
-                                <div class="info-item"><strong>Renewal Period Start:</strong> ${info.stats.renewalPeriodStart.toLocaleString()}</div>
-                                <div class="info-item"><strong>Renewal Period End:</strong> ${info.stats.renewalPeriodEnd.toLocaleString()}</div>
+                                ${Object.entries(info.stats).map(([key, value]) => {
+                                    // Format the key from camelCase to Title Case
+                                    const formattedKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                                    
+                                    // Format the value based on type
+                                    let formattedValue;
+                                    if (typeof value === 'number') {
+                                        // Check if it looks like a block number (large integer) or a decimal (days/hours)
+                                        if (Number.isInteger(value) && value > 100) {
+                                            formattedValue = value.toLocaleString();
+                                        } else {
+                                            formattedValue = value.toFixed(2);
+                                        }
+                                    } else {
+                                        formattedValue = value;
+                                    }
+                                    
+                                    return `<div class="info-item"><strong>${formattedKey}:</strong> ${formattedValue}</div>`;
+                                }).join('')}
                             </div>
                         </div>
                     ` : ''}
