@@ -89,6 +89,10 @@ main {
     padding: 2rem 0;
 }
 
+section {
+    scroll-margin-top: 140px;
+}
+
 /* Cards */
 .card {
     background: var(--card-bg);
@@ -255,12 +259,16 @@ main {
     border: 1px solid var(--card-border);
     border-radius: 8px;
     margin-bottom: 0.75rem;
-    transition: border-color 0.2s ease;
+    transition: all 0.2s ease;
     animation: staggerFade 0.4s ease forwards;
+    cursor: pointer;
 }
 
 .tx-item:hover {
     border-color: rgba(139, 92, 246, 0.3);
+    background: rgba(139, 92, 246, 0.05);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .tx-hash {
@@ -706,6 +714,38 @@ a:hover {
     animation: pulse 1.5s ease-in-out infinite;
     color: var(--text-secondary);
     font-style: italic;
+}
+
+/* Loading Spinner */
+.loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+    color: var(--text-secondary);
+    animation: fadeIn 0.3s ease;
+}
+
+.loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(139, 92, 246, 0.1);
+    border-radius: 50%;
+    border-top-color: var(--accent-color);
+    animation: spin 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    margin-bottom: 1rem;
+}
+
+.loading-text {
+    font-size: 0.9rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
 }
 
 /* New Animations */

@@ -236,7 +236,6 @@
             document.getElementById('tx-input').value = txId;
             document.querySelector('[data-tab="tx"]').click();
             searchTx();
-            document.querySelector('.search-section').scrollIntoView({ behavior: 'smooth' });
         }
 
         // Format mempool data nicely
@@ -254,9 +253,8 @@
                     </div>
                     <div class="tx-list">
                         ${mempool.map(txId => `
-                            <div class="tx-item">
+                            <div class="tx-item" onclick="openTx('${txId}')">
                                 <span class="tx-hash mono">${txId}</span>
-                                <button class="tx-view-btn" onclick="openTx('${txId}')">View</button>
                             </div>
                         `).join('')}
                     </div>
@@ -924,6 +922,18 @@
             }
         }
 
+        // Show loading animation
+        function showLoading(elementId) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.innerHTML = `
+                <div class="loading-container">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">Searching Fire...</div>
+                </div>
+            `;
+        }
+
         // Load status on page load
         async function loadStatus() {
             const chainStatus = await apiCall('chain');
@@ -948,6 +958,8 @@
                 alert('Please enter a block height or hash');
                 return;
             }
+            
+            showLoading('block-result');
             updateURL('block', blockId);
             const data = await apiCall(`block/${blockId}`);
             
@@ -966,6 +978,8 @@
                 alert('Please enter a block height or hash');
                 return;
             }
+            
+            showLoading('block-result');
             updateURL('header', blockId);
             const data = await apiCall(`header/${blockId}`);
             
@@ -984,11 +998,17 @@
                 alert('Please enter a transaction ID');
                 return;
             }
+            
+            const resultElement = document.getElementById('tx-result');
+            showLoading('tx-result');
+            
+            // Scroll to the search section
+            document.querySelector('.search-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
             updateURL('tx', txId);
             const data = await apiCall(`tx/${txId}`);
             
             // Use formatted display instead of raw JSON
-            const resultElement = document.getElementById('tx-result');
             if (data.error) {
                 resultElement.innerHTML = `<div class="error">Error: ${data.error}</div>`;
             } else {
@@ -1002,6 +1022,8 @@
                 alert('Please enter an address');
                 return;
             }
+            
+            showLoading('address-result');
             updateURL('address', address);
             const data = await apiCall(`tx/address/${address}`);
             
@@ -1020,6 +1042,8 @@
                 alert('Please enter an address');
                 return;
             }
+            
+            showLoading('address-result');
             updateURL('address', address);
             const data = await apiCall(`coin/address/${address}`);
             
@@ -1038,6 +1062,8 @@
                 alert('Please enter a name');
                 return;
             }
+            
+            showLoading('name-result');
             const punyName = toPunycode(name);
             updateURL('name', punyName);
             const data = await apiCall(`name/${punyName}`);
@@ -1057,6 +1083,8 @@
                 alert('Please enter a name');
                 return;
             }
+            
+            showLoading('name-result');
             const punyName = toPunycode(name);
             const data = await apiCall(`nameresource/${punyName}`);
             
@@ -1075,6 +1103,8 @@
                 alert('Please enter a name');
                 return;
             }
+            
+            showLoading('name-result');
             const punyName = toPunycode(name);
             const data = await apiCall(`namesummary/${punyName}`);
             
@@ -1093,6 +1123,8 @@
                 alert('Please enter a name hash');
                 return;
             }
+            
+            showLoading('name-result');
             const data = await apiCall(`namehash/${nameHash}`);
             
             // Check if result is valid and redirect to name page
