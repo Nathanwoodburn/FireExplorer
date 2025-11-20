@@ -148,6 +148,11 @@
                         document.querySelector('[data-tab="block"]').click();
                         searchBlock();
                         break;
+                    case 'header':
+                        document.getElementById('block-input').value = value;
+                        document.querySelector('[data-tab="block"]').click();
+                        searchHeader();
+                        break;
                     case 'tx':
                         document.getElementById('tx-input').value = value;
                         document.querySelector('[data-tab="tx"]').click();
@@ -294,6 +299,46 @@
                     <div class="tx-section">
                         <button class="secondary-btn" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">Show Raw JSON</button>
                         <pre style="display: none;">${JSON.stringify(block, null, 2)}</pre>
+                    </div>
+                </div>
+            `;
+            
+            return html;
+        }
+
+        // Format block header data nicely
+        function formatHeaderData(header) {
+            if (!header || header.error) {
+                return `<div class="error">Error: ${header.error || 'Invalid header data'}</div>`;
+            }
+
+            const formatTime = (timestamp) => new Date(timestamp * 1000).toLocaleString();
+            
+            let html = `
+                <div class="tx-details">
+                    <div class="tx-section">
+                        <h4>Block Header Info</h4>
+                        <div class="info-grid">
+                            <div class="info-item full-width"><strong>Hash:</strong> <span class="mono">${header.hash}</span></div>
+                            <div class="info-item"><strong>Height:</strong> ${header.height.toLocaleString()}</div>
+                            <div class="info-item"><strong>Version:</strong> ${header.version}</div>
+                            <div class="info-item"><strong>Time:</strong> ${formatTime(header.time)}</div>
+                            <div class="info-item"><strong>Bits:</strong> ${header.bits}</div>
+                            <div class="info-item"><strong>Nonce:</strong> ${header.nonce.toLocaleString()}</div>
+                            <div class="info-item full-width"><strong>Previous Block:</strong> <span class="mono">${header.prevBlock}</span></div>
+                            <div class="info-item full-width"><strong>Merkle Root:</strong> <span class="mono">${header.merkleRoot}</span></div>
+                            <div class="info-item full-width"><strong>Witness Root:</strong> <span class="mono">${header.witnessRoot}</span></div>
+                            <div class="info-item full-width"><strong>Tree Root:</strong> <span class="mono">${header.treeRoot}</span></div>
+                            <div class="info-item full-width"><strong>Reserved Root:</strong> <span class="mono">${header.reservedRoot}</span></div>
+                            <div class="info-item full-width"><strong>Extra Nonce:</strong> <span class="mono">${header.extraNonce}</span></div>
+                            <div class="info-item full-width"><strong>Mask:</strong> <span class="mono">${header.mask}</span></div>
+                            <div class="info-item full-width"><strong>Chainwork:</strong> <span class="mono">${header.chainwork}</span></div>
+                        </div>
+                    </div>
+
+                    <div class="tx-section">
+                        <button class="secondary-btn" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">Show Raw JSON</button>
+                        <pre style="display: none;">${JSON.stringify(header, null, 2)}</pre>
                     </div>
                 </div>
             `;
@@ -456,8 +501,16 @@
                 alert('Please enter a block height or hash');
                 return;
             }
+            updateURL('header', blockId);
             const data = await apiCall(`header/${blockId}`);
-            displayResult('block-result', data);
+            
+            // Use formatted display instead of raw JSON
+            const resultElement = document.getElementById('block-result');
+            if (data.error) {
+                resultElement.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+            } else {
+                resultElement.innerHTML = formatHeaderData(data);
+            }
         }
 
         async function searchTx() {

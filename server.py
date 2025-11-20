@@ -85,6 +85,12 @@ def block_route(block_id):
     return render_template("index.html", datetime=current_datetime)
 
 
+@app.route("/header/<path:block_id>")
+def header_route(block_id):
+    current_datetime = datetime.now().strftime("%d %b %Y %I:%M %p")
+    return render_template("index.html", datetime=current_datetime)
+
+
 @app.route("/address/<path:address>")
 def address_route(address):
     current_datetime = datetime.now().strftime("%d %b %Y %I:%M %p")
