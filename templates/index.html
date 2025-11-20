@@ -346,6 +346,50 @@
             return html;
         }
 
+        // Format address transactions nicely
+        function formatAddressTransactions(txs) {
+            if (!txs || txs.error) {
+                return `<div class="error">Error: ${txs.error || 'Invalid transaction data'}</div>`;
+            }
+
+            if (!Array.isArray(txs) || txs.length === 0) {
+                return `<div class="error">No transactions found for this address</div>`;
+            }
+
+            const formatValue = (value) => (value / 1e6).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' HNS';
+            const formatTime = (timestamp) => new Date(timestamp * 1000).toLocaleString();
+            
+            let html = `
+                <div class="tx-details">
+                    <div class="tx-section">
+                        <h4>Transactions (${txs.length})</h4>
+                        <div class="tx-io-list">
+                            ${txs.map((tx, i) => {
+                                const totalInput = tx.inputs.reduce((sum, inp) => sum + (inp.coin?.value || 0), 0);
+                                const totalOutput = tx.outputs.reduce((sum, out) => sum + out.value, 0);
+                                return `
+                                    <div class="tx-io-item" style="cursor: pointer;" onclick="window.location.href='/tx/${tx.hash}'">
+                                        <div class="tx-io-header">
+                                            <span class="tx-io-index">${formatTime(tx.time || tx.mtime)}</span>
+                                            <span class="tx-io-value">${tx.confirmations.toLocaleString()} confirms</span>
+                                        </div>
+                                        <div class="tx-io-hash mono">${tx.hash}</div>
+                                        <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; font-size: 0.85rem; color: #b0b0b0;">
+                                            <span>Block: ${tx.height >= 0 ? tx.height.toLocaleString() : 'Pending'}</span>
+                                            <span>Fee: ${formatValue(tx.fee)}</span>
+                                            <span>${tx.inputs.length} in → ${tx.outputs.length} out</span>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            return html;
+        }
+
         // Format transaction data nicely
         function formatTransactionData(tx) {
             if (!tx || tx.error) {
@@ -539,7 +583,14 @@
             }
             updateURL('address', address);
             const data = await apiCall(`tx/address/${address}`);
-            displayResult('address-result', data);
+            
+            // Use formatted display instead of raw JSON
+            const resultElement = document.getElementById('address-result');
+            if (data.error) {
+                resultElement.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+            } else {
+                resultElement.innerHTML = formatAddressTransactions(data);
+            }
         }
 
         async function searchAddressCoins() {
