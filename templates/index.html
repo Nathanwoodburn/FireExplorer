@@ -522,6 +522,228 @@
             return html;
         }
 
+        // Format name info nicely
+        function formatNameInfo(data) {
+            if (!data || data.error) {
+                return `<div class="error">Error: ${data.error || 'Invalid name data'}</div>`;
+            }
+
+            const info = data.info;
+            const start = data.start;
+            const formatValue = (value) => (value / 1e6).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' HNS';
+            const formatDate = (timestamp) => new Date(timestamp * 1000).toLocaleString();
+            
+            let html = `
+                <div class="tx-details">
+                    <div class="tx-section">
+                        <h4>Name: ${info.name}</h4>
+                        <div class="info-grid">
+                            <div class="info-item"><strong>State:</strong> <span style="color: #f7931e;">${info.state}</span></div>
+                            <div class="info-item"><strong>Registered:</strong> ${info.registered ? 'Yes' : 'No'}</div>
+                            <div class="info-item"><strong>Height:</strong> ${info.height.toLocaleString()}</div>
+                            <div class="info-item"><strong>Value:</strong> ${formatValue(info.value)}</div>
+                            <div class="info-item"><strong>Highest Bid:</strong> ${formatValue(info.highest)}</div>
+                            <div class="info-item"><strong>Renewals:</strong> ${info.renewals}</div>
+                            <div class="info-item"><strong>Next Renewal:</strong> Height ${info.renewal.toLocaleString()}</div>
+                            <div class="info-item"><strong>Expired:</strong> ${info.expired ? 'Yes' : 'No'}</div>
+                            <div class="info-item"><strong>Revoked:</strong> ${info.revoked > 0 ? 'Yes' : 'No'}</div>
+                            <div class="info-item"><strong>Weak:</strong> ${info.weak ? 'Yes' : 'No'}</div>
+                        </div>
+                    </div>
+
+                    ${info.stats ? `
+                        <div class="tx-section">
+                            <h4>Expiration Info</h4>
+                            <div class="info-grid">
+                                <div class="info-item"><strong>Blocks Until Expire:</strong> ${info.stats.blocksUntilExpire.toLocaleString()}</div>
+                                <div class="info-item"><strong>Days Until Expire:</strong> ${info.stats.daysUntilExpire.toFixed(2)}</div>
+                                <div class="info-item"><strong>Renewal Period Start:</strong> ${info.stats.renewalPeriodStart.toLocaleString()}</div>
+                                <div class="info-item"><strong>Renewal Period End:</strong> ${info.stats.renewalPeriodEnd.toLocaleString()}</div>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    <div class="tx-section">
+                        <h4>Owner</h4>
+                        <div style="cursor: pointer; padding: 1rem; background: rgba(255, 107, 53, 0.1); border-radius: 8px;" onclick="window.location.href='/tx/${info.owner.hash}'">
+                            <div class="mono" style="word-break: break-all; color: #ff6b35;">TX: ${info.owner.hash}</div>
+                            <div style="color: #b0b0b0; margin-top: 0.5rem;">Output Index: ${info.owner.index}</div>
+                        </div>
+                    </div>
+
+                    <div class="tx-section">
+                        <h4>Name Hash</h4>
+                        <div class="mono" style="word-break: break-all; padding: 1rem; background: rgba(255, 107, 53, 0.05); border-radius: 8px;">${info.nameHash}</div>
+                    </div>
+
+                    ${start ? `
+                        <div class="tx-section">
+                            <h4>Auction Info</h4>
+                            <div class="info-grid">
+                                <div class="info-item"><strong>Start Height:</strong> ${start.start.toLocaleString()}</div>
+                                <div class="info-item"><strong>Week:</strong> ${start.week}</div>
+                                <div class="info-item"><strong>Reserved:</strong> ${start.reserved ? 'Yes' : 'No'}</div>
+                                <div class="info-item"><strong>Locked:</strong> ${start.locked ? 'Yes' : 'No'}</div>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    <div class="tx-section">
+                        <button class="secondary-btn" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">Show Raw JSON</button>
+                        <pre style="display: none;">${JSON.stringify(data, null, 2)}</pre>
+                    </div>
+                </div>
+            `;
+            
+            return html;
+        }
+
+        // Format name resource records nicely
+        function formatNameResource(data) {
+            if (!data || data.error) {
+                return `<div class="error">Error: ${data.error || 'Invalid resource data'}</div>`;
+            }
+
+            if (!data.records || data.records.length === 0) {
+                return `<div class="error">No resource records found</div>`;
+            }
+
+            const records = data.records;
+            
+            let html = `
+                <div class="tx-details">
+                    <div class="tx-section">
+                        <h4>DNS Records (${records.length})</h4>
+                        <div class="tx-io-list">
+                            ${records.map((record, i) => {
+                                let recordDetails = `<strong>${record.type}</strong>`;
+                                
+                                switch(record.type) {
+                                    case 'NS':
+                                        recordDetails += ` → ${record.ns}`;
+                                        break;
+                                    case 'DS':
+                                        recordDetails += `<br><span style="font-size: 0.9rem;">KeyTag: ${record.keyTag}, Algorithm: ${record.algorithm}, DigestType: ${record.digestType}</span><br><span class="mono" style="font-size: 0.85rem; color: #b0b0b0; word-break: break-all;">${record.digest}</span>`;
+                                        break;
+                                    case 'TXT':
+                                        recordDetails += `<br><span style="color: #b0b0b0;">${record.txt.map(t => `"${t}"`).join('<br>')}</span>`;
+                                        break;
+                                    case 'GLUE4':
+                                    case 'GLUE6':
+                                        recordDetails += ` → ${record.ns}<br><span style="color: #f7931e;">${record.address}</span>`;
+                                        break;
+                                    case 'SYNTH4':
+                                    case 'SYNTH6':
+                                        recordDetails += ` → <span style="color: #f7931e;">${record.address}</span>`;
+                                        break;
+                                }
+                                
+                                return `
+                                    <div class="tx-io-item">
+                                        <div class="tx-io-header">
+                                            <span class="tx-io-index">Record #${i}</span>
+                                        </div>
+                                        <div style="margin-top: 0.5rem;">${recordDetails}</div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+
+                    <div class="tx-section">
+                        <button class="secondary-btn" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">Show Raw JSON</button>
+                        <pre style="display: none;">${JSON.stringify(data, null, 2)}</pre>
+                    </div>
+                </div>
+            `;
+            
+            return html;
+        }
+
+        // Format name summary nicely
+        function formatNameSummary(data) {
+            if (!data || data.error) {
+                return `<div class="error">Error: ${data.error || 'Invalid summary data'}</div>`;
+            }
+
+            const formatValue = (value) => (value).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' HNS';
+            const formatDate = (timestamp) => new Date(timestamp * 1000).toLocaleString();
+            
+            let html = `
+                <div class="tx-details">
+                    <div class="tx-section">
+                        <h4>Name: ${data.name}</h4>
+                        <div class="info-grid">
+                            <div class="info-item"><strong>State:</strong> <span style="color: #f7931e;">${data.state}</span></div>
+                            <div class="info-item"><strong>Height:</strong> ${data.height.toLocaleString()}</div>
+                            <div class="info-item"><strong>Value:</strong> ${formatValue(data.value)}</div>
+                            <div class="info-item"><strong>Blocks Until Expire:</strong> ${data.blocksUntilExpire.toLocaleString()}</div>
+                            <div class="info-item"><strong>Mint Date:</strong> ${formatDate(data.mintTimestamp)}</div>
+                        </div>
+                    </div>
+
+                    <div class="tx-section">
+                        <h4>Owner Address</h4>
+                        <div style="cursor: pointer; padding: 1rem; background: rgba(255, 107, 53, 0.1); border-radius: 8px;" onclick="window.location.href='/address/${data.owner}'">
+                            <div class="mono" style="word-break: break-all; color: #ff6b35;">${data.owner}</div>
+                        </div>
+                    </div>
+
+                    <div class="tx-section">
+                        <h4>Name Hash</h4>
+                        <div class="mono" style="word-break: break-all; padding: 1rem; background: rgba(255, 107, 53, 0.05); border-radius: 8px;">${data.hash}</div>
+                    </div>
+
+                    ${data.resources && data.resources[0] && data.resources[0].records ? `
+                        <div class="tx-section">
+                            <h4>DNS Records (${data.resources[0].records.length})</h4>
+                            <div class="tx-io-list">
+                                ${data.resources[0].records.map((record, i) => {
+                                    let recordDetails = `<strong>${record.type}</strong>`;
+                                    
+                                    switch(record.type) {
+                                        case 'NS':
+                                            recordDetails += ` → ${record.ns}`;
+                                            break;
+                                        case 'DS':
+                                            recordDetails += `<br><span style="font-size: 0.9rem;">KeyTag: ${record.keyTag}, Algorithm: ${record.algorithm}</span>`;
+                                            break;
+                                        case 'TXT':
+                                            recordDetails += `<br><span style="color: #b0b0b0;">${record.txt.map(t => `"${t}"`).join('<br>')}</span>`;
+                                            break;
+                                        case 'GLUE4':
+                                        case 'GLUE6':
+                                            recordDetails += ` → ${record.ns}<br><span style="color: #f7931e;">${record.address}</span>`;
+                                            break;
+                                        case 'SYNTH4':
+                                        case 'SYNTH6':
+                                            recordDetails += ` → <span style="color: #f7931e;">${record.address}</span>`;
+                                            break;
+                                    }
+                                    
+                                    return `
+                                        <div class="tx-io-item">
+                                            <div class="tx-io-header">
+                                                <span class="tx-io-index">Record #${i}</span>
+                                            </div>
+                                            <div style="margin-top: 0.5rem;">${recordDetails}</div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    <div class="tx-section">
+                        <button class="secondary-btn" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">Show Raw JSON</button>
+                        <pre style="display: none;">${JSON.stringify(data, null, 2)}</pre>
+                    </div>
+                </div>
+            `;
+            
+            return html;
+        }
+
         // Format transaction data nicely
         function formatTransactionData(tx) {
             if (!tx || tx.error) {
@@ -767,7 +989,14 @@
             }
             updateURL('name', name);
             const data = await apiCall(`name/${name}`);
-            displayResult('name-result', data);
+            
+            // Use formatted display
+            const resultElement = document.getElementById('name-result');
+            if (data.error) {
+                resultElement.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+            } else {
+                resultElement.innerHTML = formatNameInfo(data);
+            }
         }
 
         async function searchNameResource() {
@@ -777,7 +1006,14 @@
                 return;
             }
             const data = await apiCall(`nameresource/${name}`);
-            displayResult('name-result', data);
+            
+            // Use formatted display
+            const resultElement = document.getElementById('name-result');
+            if (data.error) {
+                resultElement.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+            } else {
+                resultElement.innerHTML = formatNameResource(data);
+            }
         }
 
         async function searchNameSummary() {
@@ -787,7 +1023,14 @@
                 return;
             }
             const data = await apiCall(`namesummary/${name}`);
-            displayResult('name-result', data);
+            
+            // Use formatted display
+            const resultElement = document.getElementById('name-result');
+            if (data.error) {
+                resultElement.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+            } else {
+                resultElement.innerHTML = formatNameSummary(data);
+            }
         }
 
         async function searchNameHash() {
