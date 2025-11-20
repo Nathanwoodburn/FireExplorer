@@ -49,7 +49,7 @@
                 <!-- Block Search -->
                 <div class="tab-content active" id="block-tab">
                     <div class="search-box">
-                        <input type="text" id="block-input" placeholder="Enter block height or hash">
+                        <input type="text" id="block-input" placeholder="Enter block height or hash" onkeypress="if(event.key === 'Enter') searchBlock()">
                         <button onclick="searchBlock()">Search Block</button>
                         <button onclick="searchHeader()">Get Header</button>
                     </div>
@@ -59,7 +59,7 @@
                 <!-- Transaction Search -->
                 <div class="tab-content" id="tx-tab">
                     <div class="search-box">
-                        <input type="text" id="tx-input" placeholder="Enter transaction ID">
+                        <input type="text" id="tx-input" placeholder="Enter transaction ID" onkeypress="if(event.key === 'Enter') searchTx()">
                         <button onclick="searchTx()">Search Transaction</button>
                     </div>
                     <div id="tx-result" class="result-box"></div>
@@ -68,7 +68,7 @@
                 <!-- Address Search -->
                 <div class="tab-content" id="address-tab">
                     <div class="search-box">
-                        <input type="text" id="address-input" placeholder="Enter Handshake address">
+                        <input type="text" id="address-input" placeholder="Enter Handshake address" onkeypress="if(event.key === 'Enter') searchAddressTx()">
                         <button onclick="searchAddressTx()">Get Transactions</button>
                         <button onclick="searchAddressCoins()">Get Coins</button>
                     </div>
@@ -78,13 +78,13 @@
                 <!-- Name Search -->
                 <div class="tab-content" id="name-tab">
                     <div class="search-box">
-                        <input type="text" id="name-input" placeholder="Enter Handshake name">
+                        <input type="text" id="name-input" placeholder="Enter Handshake name" onkeypress="if(event.key === 'Enter') searchName()">
                         <button onclick="searchName()">Name Info</button>
                         <button onclick="searchNameResource()">Get Resource</button>
                         <button onclick="searchNameSummary()">Get Summary</button>
                     </div>
                     <div class="search-box">
-                        <input type="text" id="namehash-input" placeholder="Enter name hash">
+                        <input type="text" id="namehash-input" placeholder="Enter name hash" onkeypress="if(event.key === 'Enter') searchNameHash()">
                         <button onclick="searchNameHash()">Search by Hash</button>
                     </div>
                     <div id="name-result" class="result-box"></div>
@@ -97,8 +97,8 @@
             <div class="card">
                 <h2>Coin Lookup</h2>
                 <div class="search-box">
-                    <input type="text" id="coin-hash" placeholder="Coin hash">
-                    <input type="text" id="coin-index" placeholder="Index">
+                    <input type="text" id="coin-hash" placeholder="Coin hash" onkeypress="if(event.key === 'Enter') searchCoin()">
+                    <input type="text" id="coin-index" placeholder="Index" onkeypress="if(event.key === 'Enter') searchCoin()">
                     <button onclick="searchCoin()">Get Coin Info</button>
                 </div>
                 <div id="coin-result" class="result-box"></div>
