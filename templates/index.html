@@ -1055,7 +1055,7 @@
                     const note = document.createElement('div');
                     note.className = 'success-message';
                     note.style.marginBottom = '1rem';
-                    note.innerHTML = `Resolved alias <strong>${hip02Result.name || address}</strong> to address`;
+                    note.innerHTML = `Resolved <strong>${hip02Result.name || address}</strong> to address <br><span class="mono">${address}</span>`;
                     resultElement.parentNode.insertBefore(note, resultElement);
                     setTimeout(() => note.remove(), 5000);
                 } else {

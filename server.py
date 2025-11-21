@@ -153,6 +153,7 @@ def hip02(domain: str):
                 "success": True,
                 "address": hip2_record,
                 "method": "hip02",
+                "name": domain,
             }
         )
 
@@ -163,11 +164,13 @@ def hip02(domain: str):
                 "success": True,
                 "address": wallet_record,
                 "method": "wallet_txt",
+                "name": domain,
             }
         )
     return jsonify(
         {
             "success": False,
+            "name": domain,
             "error": "No HIP02 or WALLET record found for this domain",
         }
     )
@@ -185,4 +188,4 @@ def not_found(e):
 
 # endregion
 if __name__ == "__main__":
-    app.run(debug=True, port=5000, host="127.0.0.1")
+    app.run(debug=True, port=5000, host="0.0.0.0")
