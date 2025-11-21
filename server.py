@@ -18,7 +18,8 @@ from tools import hip2, wallet_txt
 dotenv.load_dotenv()
 
 app = Flask(__name__)
-DATABASE = "fireexplorer.db"
+
+DATABASE = os.getenv("DATABASE_PATH", "fireexplorer.db")
 
 
 def get_db():

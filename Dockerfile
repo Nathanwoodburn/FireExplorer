@@ -22,6 +22,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # Add mount point for data volume
 ENV BASE_DIR=/data
+ENV DATABASE_PATH=/data/fireexplorer.db
 VOLUME /data
 
 EXPOSE 5000
