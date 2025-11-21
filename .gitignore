@@ -4,3 +4,4 @@ __pycache__/
 .env
 .vs/
 .venv/
+fireexplorer.db

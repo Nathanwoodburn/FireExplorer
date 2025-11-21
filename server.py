@@ -5,9 +5,12 @@ from flask import (
     send_from_directory,
     send_file,
     jsonify,
+    g,
+    request,
 )
 import os
 import requests
+import sqlite3
 from datetime import datetime
 import dotenv
 from tools import hip2, wallet_txt
@@ -15,6 +18,39 @@ from tools import hip2, wallet_txt
 dotenv.load_dotenv()
 
 app = Flask(__name__)
+DATABASE = "fireexplorer.db"
+
+
+def get_db():
+    db = getattr(g, "_database", None)
+    if db is None:
+        db = g._database = sqlite3.connect(DATABASE)
+        db.row_factory = sqlite3.Row
+    return db
+
+
+@app.teardown_appcontext
+def close_connection(exception):
+    db = getattr(g, "_database", None)
+    if db is not None:
+        db.close()
+
+
+def init_db():
+    with app.app_context():
+        db = get_db()
+        db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS names (
+                namehash TEXT PRIMARY KEY,
+                name TEXT NOT NULL
+            )
+        """
+        )
+        db.commit()
+
+
+init_db()
 
 
 def find(name, path):
@@ -133,6 +169,32 @@ def catch_all(path: str):
     return render_template("404.html"), 404
 
 
+# endregion
+
+
+# region API routes
+@app.route("/api/v1/namehash/<namehash>")
+def namehash_api(namehash):
+    db = get_db()
+    cur = db.execute("SELECT * FROM names WHERE namehash = ?", (namehash,))
+    row = cur.fetchone()
+    if row is None:
+        # Get namehash from hsd.hns.au
+        req = requests.get(f"https://hsd.hns.au/api/v1/namehash/{namehash}")
+        if req.status_code == 200:
+            name = req.json().get("result")
+            if not name:
+                return jsonify({"name": "Error", "namehash": namehash})
+            # Insert into database
+            db.execute(
+                "INSERT OR REPLACE INTO names (namehash, name) VALUES (?, ?)",
+                (namehash, name),
+            )
+            db.commit()
+            return jsonify({"name": name, "namehash": namehash})
+    return jsonify(dict(row))
+
+
 @app.route("/api/v1/status")
 def api_status():
     return jsonify(
@@ -176,6 +238,18 @@ def hip02(domain: str):
     )
 
 
+@app.route("/api/v1/covenant", methods=["POST"])
+def covenant_api():
+    data = request.get_json()
+
+    return jsonify(
+        {
+            "success": True,
+            "data": data,
+        }
+    )
+
+
 # endregion
 
 
@@ -188,4 +262,4 @@ def not_found(e):
 
 # endregion
 if __name__ == "__main__":
-    app.run(debug=True, port=5000, host="0.0.0.0")
+    app.run(debug=True, port=5000, host="127.0.0.1")

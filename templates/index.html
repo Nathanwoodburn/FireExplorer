@@ -1178,17 +1178,23 @@
             }
             
             showLoading('name-result');
-            const data = await apiCall(`namehash/${nameHash}`);
             
-            // Check if result is valid and redirect to name page
-            const resultElement = document.getElementById('name-result');
-            if (data.error) {
-                resultElement.innerHTML = `<div class="error">Error: ${data.error.message ? data.error.message : "Failed to lookup hash"}</div>`;
-            } else if (data.result && typeof data.result === 'string') {
-                // Valid name found, redirect to name page
-                window.location.href = `/name/${data.result}`;
-            } else {
-                resultElement.innerHTML = `<div class="error">No name found for this hash</div>`;
+            try {
+                const response = await fetch(`/api/v1/namehash/${nameHash}`);
+                const data = await response.json();
+                
+                const resultElement = document.getElementById('name-result');
+                if (data.error) {
+                    resultElement.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+                } else if (data.name) {
+                    // Valid name found, redirect to name page
+                    window.location.href = `/name/${data.name}`;
+                } else {
+                    resultElement.innerHTML = `<div class="error">No name found for this hash</div>`;
+                }
+            } catch (e) {
+                const resultElement = document.getElementById('name-result');
+                resultElement.innerHTML = `<div class="error">Error: ${e.message}</div>`;
             }
         }
 
