@@ -198,11 +198,18 @@ def namehash_api(namehash):
 
 @app.route("/api/v1/status")
 def api_status():
+    # Count number of names in database
+    db = get_db()
+    cur = db.execute("SELECT COUNT(*) as count FROM names")
+    row = cur.fetchone()
+    name_count = row["count"] if row else 0
+
     return jsonify(
         {
             "status": "ok",
             "service": "FireExplorer",
             "version": "1.0.0",
+            "names_cached": name_count,
         }
     )
 
@@ -242,6 +249,72 @@ def hip02(domain: str):
 @app.route("/api/v1/covenant", methods=["POST"])
 def covenant_api():
     data = request.get_json()
+
+    if isinstance(data, list):
+        covenants = data
+        results = []
+
+        # Collect all namehashes needed
+        namehashes = set()
+        for cov in covenants:
+            items = cov.get("items", [])
+            if items:
+                namehashes.add(items[0])
+
+        # Batch DB lookup
+        db = get_db()
+        known_names = {}
+        if namehashes:
+            placeholders = ",".join("?" for _ in namehashes)
+            cur = db.execute(
+                f"SELECT namehash, name FROM names WHERE namehash IN ({placeholders})",
+                list(namehashes),
+            )
+            for row in cur:
+                known_names[row["namehash"]] = row["name"]
+
+        # Identify missing namehashes
+        missing_hashes = [nh for nh in namehashes if nh not in known_names]
+
+        # Fetch missing from HSD
+        session = requests.Session()
+        for nh in missing_hashes:
+            try:
+                req = session.get(f"https://hsd.hns.au/api/v1/namehash/{nh}")
+                if req.status_code == 200:
+                    name = req.json().get("result")
+                    if name:
+                        known_names[nh] = name
+                        # Update DB
+                        db.execute(
+                            "INSERT OR REPLACE INTO names (namehash, name) VALUES (?, ?)",
+                            (nh, name),
+                        )
+            except Exception as e:
+                print(f"Error fetching namehash {nh}: {e}")
+
+        db.commit()
+
+        # Build results
+        for cov in covenants:
+            action = cov.get("action")
+            items = cov.get("items", [])
+
+            if not action:
+                results.append({"covenant": cov, "display": "Unknown"})
+                continue
+
+            display = f"{action}"
+            if items:
+                nh = items[0]
+                if nh in known_names:
+                    name = known_names[nh]
+                    display += f' <a href="/name/{name}">{name}</a>'
+
+            results.append({"covenant": cov, "display": display})
+
+        return jsonify(results)
+
     # Get the covenant data
     action = data.get("action")
     items = data.get("items", [])

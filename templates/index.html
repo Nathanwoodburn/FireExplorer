@@ -944,7 +944,8 @@
         // Update covenant information from API
         async function updateCovenants() {
             const elements = document.querySelectorAll('[data-covenant-action]');
-            const cache = {};
+            const covenantsToFetch = [];
+            const elementMap = new Map(); // Map JSON string -> Array of elements
 
             for (const el of elements) {
                 const action = el.dataset.covenantAction;
@@ -965,39 +966,46 @@
 
                 if (!covenantData) continue;
 
-                // Create a cache key based on the full covenant data
-                const cacheKey = JSON.stringify(covenantData);
+                const key = JSON.stringify(covenantData);
+                if (!elementMap.has(key)) {
+                    elementMap.set(key, []);
+                    covenantsToFetch.push(covenantData);
+                }
+                elementMap.get(key).push(el);
+            }
 
-                let display = action;
-                if (cache[cacheKey]) {
-                    display = cache[cacheKey];
-                } else {
-                    try {
-                        const res = await fetch(`/api/v1/covenant`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify(covenantData)
-                        });
-                        
-                        if (res.ok) {
-                            const data = await res.json();
-                            display = data.display || action;
-                            cache[cacheKey] = display;
+            if (covenantsToFetch.length === 0) return;
+
+            try {
+                const res = await fetch(`/api/v1/covenant`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(covenantsToFetch)
+                });
+
+                if (res.ok) {
+                    const results = await res.json();
+
+                    for (const result of results) {
+                        const key = JSON.stringify(result.covenant);
+                        const els = elementMap.get(key);
+
+                        if (els) {
+                            for (const el of els) {
+                                if (el.classList.contains('tx-covenant')) {
+                                    el.innerHTML = `Covenant: ${result.display}`;
+                                } else {
+                                    el.innerHTML = result.display;
+                                }
+                                el.dataset.covenantUpdated = "true";
+                            }
                         }
-                    } catch (e) {
-                        console.error('Failed to fetch covenant info:', e);
                     }
                 }
-                
-                // Check if it's the .tx-covenant div which includes "Covenant: " text
-                if (el.classList.contains('tx-covenant')) {
-                    el.innerHTML = `Covenant: ${display}`;
-                } else {
-                    el.textContent = display;
-                }
-                el.dataset.covenantUpdated = "true";
+            } catch (e) {
+                console.error('Failed to fetch covenant info:', e);
             }
         }
 
