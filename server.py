@@ -242,13 +242,37 @@ def hip02(domain: str):
 @app.route("/api/v1/covenant", methods=["POST"])
 def covenant_api():
     data = request.get_json()
+    # Get the covenant data
+    action = data.get("action")
+    items = data.get("items", [])
 
-    return jsonify(
-        {
-            "success": True,
-            "data": data,
-        }
-    )
+    if not action:
+        return jsonify({"success": False, "data": data})
+
+    display = f"{action}"
+    if len(items) > 0:
+        name_hash = items[0]
+        # Lookup name from database
+        db = get_db()
+        cur = db.execute("SELECT * FROM names WHERE namehash = ?", (name_hash,))
+        row = cur.fetchone()
+        if row:
+            name = row["name"]
+            display += f' <a href="/name/{name}">{name}</a>'
+        else:
+            req = requests.get(f"https://hsd.hns.au/api/v1/namehash/{name_hash}")
+            if req.status_code == 200:
+                name = req.json().get("result")
+                if name:
+                    display += f" {name}"
+                    # Insert into database
+                    db.execute(
+                        "INSERT OR REPLACE INTO names (namehash, name) VALUES (?, ?)",
+                        (name_hash, name),
+                    )
+                    db.commit()
+
+    return jsonify({"success": True, "data": data, "display": display})
 
 
 # endregion

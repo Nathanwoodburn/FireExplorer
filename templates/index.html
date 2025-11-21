@@ -469,7 +469,7 @@
                                     <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; font-size: 0.85rem; color: #b0b0b0;">
                                         <span>Height: ${coin.height.toLocaleString()}</span>
                                         <span>Coinbase: ${coin.coinbase ? 'Yes' : 'No'}</span>
-                                        <span>Covenant: ${coin.covenant.action}</span>
+                                        <span>Covenant: <span data-covenant-action="${coin.covenant.action}" data-covenant="${encodeURIComponent(JSON.stringify(coin.covenant))}">${coin.covenant.action}</span></span>
                                     </div>
                                 </div>
                             `).join('')}
@@ -521,7 +521,7 @@
                             </div>
                             <div class="info-item">
                                 <label>Covenant:</label>
-                                <span>${coin.covenant.action}</span>
+                                <span data-covenant-action="${coin.covenant.action}" data-covenant="${encodeURIComponent(JSON.stringify(coin.covenant))}">${coin.covenant.action}</span>
                             </div>
                         </div>
                     </div>
@@ -861,7 +861,7 @@
                                                 <span class="tx-io-value">${input.coin ? formatValue(input.coin.value) : 'Unknown'}</span>
                                             </div>
                                             <div class="tx-io-address">${input.coin ? input.coin.address : (input.address || 'Unknown')}</div>
-                                            ${input.coin && input.coin.covenant.action !== 'NONE' ? `<div class="tx-covenant">Covenant: ${input.coin.covenant.action}</div>` : ''}
+                                            ${input.coin && input.coin.covenant.action !== 'NONE' ? `<div class="tx-covenant" data-covenant-action="${input.coin.covenant.action}" data-covenant="${encodeURIComponent(JSON.stringify(input.coin.covenant))}">Covenant: ${input.coin.covenant.action}</div>` : ''}
                                         </div>
                                     `;
                                 }
@@ -879,7 +879,7 @@
                                         <span class="tx-io-value">${formatValue(output.value)}</span>
                                     </div>
                                     <div class="tx-io-address">${output.address}</div>
-                                    ${output.covenant.action !== 'NONE' ? `<div class="tx-covenant">Covenant: ${output.covenant.action}</div>` : ''}
+                                    ${output.covenant.action !== 'NONE' ? `<div class="tx-covenant" data-covenant-action="${output.covenant.action}" data-covenant="${encodeURIComponent(JSON.stringify(output.covenant))}">Covenant: ${output.covenant.action}</div>` : ''}
                                 </div>
                             `).join('')}
                         </div>
@@ -919,6 +919,7 @@
                 </div>
             `;
             document.body.appendChild(modal);
+            if (!data.error) updateCovenants();
         }
 
         // Display helper
@@ -937,6 +938,66 @@
                     return;
                 }
                 element.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            }
+        }
+
+        // Update covenant information from API
+        async function updateCovenants() {
+            const elements = document.querySelectorAll('[data-covenant-action]');
+            const cache = {};
+
+            for (const el of elements) {
+                const action = el.dataset.covenantAction;
+                if (action === 'NONE') continue;
+
+                // Skip if already updated
+                if (el.dataset.covenantUpdated) continue;
+
+                // Get full covenant data
+                let covenantData = null;
+                if (el.dataset.covenant) {
+                    try {
+                        covenantData = JSON.parse(decodeURIComponent(el.dataset.covenant));
+                    } catch (e) {
+                        console.error('Failed to parse covenant data:', e);
+                    }
+                }
+
+                if (!covenantData) continue;
+
+                // Create a cache key based on the full covenant data
+                const cacheKey = JSON.stringify(covenantData);
+
+                let display = action;
+                if (cache[cacheKey]) {
+                    display = cache[cacheKey];
+                } else {
+                    try {
+                        const res = await fetch(`/api/v1/covenant`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(covenantData)
+                        });
+                        
+                        if (res.ok) {
+                            const data = await res.json();
+                            display = data.display || action;
+                            cache[cacheKey] = display;
+                        }
+                    } catch (e) {
+                        console.error('Failed to fetch covenant info:', e);
+                    }
+                }
+                
+                // Check if it's the .tx-covenant div which includes "Covenant: " text
+                if (el.classList.contains('tx-covenant')) {
+                    el.innerHTML = `Covenant: ${display}`;
+                } else {
+                    el.textContent = display;
+                }
+                el.dataset.covenantUpdated = "true";
             }
         }
 
@@ -1031,6 +1092,7 @@
                 resultElement.innerHTML = `<div class="error">Error: ${data.error}</div>`;
             } else {
                 resultElement.innerHTML = formatTransactionData(data);
+                updateCovenants();
             }
         }
 
@@ -1106,6 +1168,7 @@
                 resultElement.innerHTML = `<div class="error">Error: ${data.error}</div>`;
             } else {
                 resultElement.innerHTML = formatAddressCoins(data);
+                updateCovenants();
             }
         }
 
