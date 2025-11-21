@@ -696,7 +696,7 @@
                                         recordDetails += `<br><span style="font-size: 0.9rem;">KeyTag: ${record.keyTag}, Algorithm: ${record.algorithm}, DigestType: ${record.digestType}</span><br><span class="mono" style="font-size: 0.85rem; color: #b0b0b0; word-break: break-all;">${record.digest}</span>`;
                                         break;
                                     case 'TXT':
-                                        recordDetails += `<br><span style="color: #b0b0b0;">${record.txt.map(t => `"${t}"`).join('<br>')}</span>`;
+                                        recordDetails += `<br><span style="color: #b0b0b0;">${record.txt.join('<br>')}</span>`;
                                         break;
                                     case 'GLUE4':
                                     case 'GLUE6':
@@ -779,7 +779,7 @@
                                             recordDetails += `<br><span style="font-size: 0.9rem;">KeyTag: ${record.keyTag}, Algorithm: ${record.algorithm}</span>`;
                                             break;
                                         case 'TXT':
-                                            recordDetails += `<br><span style="color: #b0b0b0;">${record.txt.map(t => `"${t}"`).join('<br>')}</span>`;
+                                            recordDetails += `<br><span style="color: #b0b0b0;">${record.txt.join('<br>')}</span>`;
                                             break;
                                         case 'GLUE4':
                                         case 'GLUE6':
