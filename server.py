@@ -13,13 +13,17 @@ import requests
 import sqlite3
 from datetime import datetime
 from urllib.parse import urlencode
+from io import BytesIO
 from xml.sax.saxutils import escape
+import importlib
 import dotenv
 from tools import hip2, wallet_txt
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 dotenv.load_dotenv()
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 DATABASE = os.getenv("DATABASE_PATH", "fireexplorer.db")
 HSD_API_BASE = os.getenv("HSD_API_BASE", "https://hsd.hns.au/api/v1")
@@ -107,6 +111,12 @@ def _fetch_explorer_json(endpoint: str):
 def _get_public_base_url() -> str:
     if PUBLIC_BASE_URL:
         return PUBLIC_BASE_URL
+    forwarded_proto = request.headers.get("X-Forwarded-Proto")
+    forwarded_host = request.headers.get("X-Forwarded-Host")
+    if forwarded_proto and forwarded_host:
+        proto = forwarded_proto.split(",")[0].strip()
+        host = forwarded_host.split(",")[0].strip()
+        return f"{proto}://{host}"
     return request.url_root.rstrip("/")
 
 
@@ -304,7 +314,7 @@ def _render_index(search_type: str | None = None, search_value: str | None = Non
     og_context = _build_og_context(search_type, search_value)
     image_query = og_context["image_query"]
     public_base_url = _get_public_base_url()
-    og_image_url = public_base_url + "/og-image?" + urlencode(image_query)
+    og_image_url = public_base_url + "/og-image.png?" + urlencode(image_query)
     og_url = public_base_url + request.full_path
     if og_url.endswith("?"):
         og_url = og_url[:-1]
@@ -322,6 +332,72 @@ def _render_index(search_type: str | None = None, search_value: str | None = Non
         og_image=og_image_url,
         twitter_domain=twitter_domain,
     )
+
+
+def _get_og_image_context() -> dict:
+    title = _truncate(request.args.get("title", "Fire Explorer"), 90)
+    subtitle = _truncate(
+        request.args.get("subtitle", "A hot new Handshake Blockchain Explorer"),
+        140,
+    )
+    search_type = _truncate(request.args.get("type", "Explorer"), 24)
+    search_value = request.args.get("value", "")
+
+    normalized_type = search_type.strip().lower()
+    value_max_length = 44
+    if normalized_type in {"transaction", "tx"}:
+        value_max_length = 30
+
+    display_value = _ellipsize_middle(search_value, value_max_length)
+    if search_value.isdigit() and int(search_value) > 100:
+        display_value = f"{int(search_value):,}"
+
+    value_font_size = "30"
+    if len(display_value) > 34:
+        value_font_size = "26"
+
+    is_default_card = not search_value.strip() and normalized_type in {
+        "explorer",
+        "search",
+        "",
+    }
+
+    return {
+        "title": title,
+        "subtitle": subtitle,
+        "search_type": search_type,
+        "search_value": search_value,
+        "display_value": display_value,
+        "value_font_size": value_font_size,
+        "is_default_card": is_default_card,
+    }
+
+
+def _load_og_font(size: int, bold: bool = False):
+    try:
+        image_font_module = importlib.import_module("PIL.ImageFont")
+        if bold:
+            return image_font_module.truetype("DejaVuSans-Bold.ttf", size=size)
+        return image_font_module.truetype("DejaVuSans.ttf", size=size)
+    except Exception:
+        try:
+            image_font_module = importlib.import_module("PIL.ImageFont")
+            return image_font_module.load_default()
+        except Exception:
+            return None
+
+
+def _fit_text(draw, text: str, font, max_width: int) -> str:
+    candidate = text
+    while candidate:
+        bbox = draw.textbbox((0, 0), candidate, font=font)
+        if bbox[2] - bbox[0] <= max_width:
+            return candidate
+        candidate = candidate[:-1]
+
+    if text:
+        return "…"
+    return text
 
 
 # Assets routes
@@ -407,31 +483,13 @@ def coin_route(coin_hash, index):
 
 @app.route("/og-image")
 def og_image():
-    title = _truncate(request.args.get("title", "Fire Explorer"), 90)
-    subtitle = _truncate(
-        request.args.get("subtitle", "A hot new Handshake Blockchain Explorer"),
-        140,
-    )
-    search_type = _truncate(request.args.get("type", "Explorer"), 24)
-    search_value = request.args.get("value", "")
-
-    normalized_type = search_type.strip().lower()
-    value_max_length = 44
-    if normalized_type in {"transaction", "tx"}:
-        value_max_length = 30
-
-    display_value = _ellipsize_middle(search_value, value_max_length)
-    # Check if value is a whole number > 100 and format with commas
-    if search_value.isdigit() and int(search_value) > 100:
-        display_value = f"{int(search_value):,}"
-    value_font_size = "30"
-    if len(display_value) > 34:
-        value_font_size = "26"
-    is_default_card = not search_value.strip() and normalized_type in {
-        "explorer",
-        "search",
-        "",
-    }
+    context = _get_og_image_context()
+    title = context["title"]
+    subtitle = context["subtitle"]
+    search_type = context["search_type"]
+    display_value = context["display_value"]
+    value_font_size = context["value_font_size"]
+    is_default_card = context["is_default_card"]
 
     type_text = escape(search_type)
     value_text = escape(display_value)
@@ -442,56 +500,148 @@ def og_image():
         svg = f"""<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1200\" height=\"630\" viewBox=\"0 0 1200 630\">
     <defs>
         <linearGradient id=\"bg\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">
-            <stop offset=\"0%\" stop-color=\"#0b1220\" />
-            <stop offset=\"100%\" stop-color=\"#1f2937\" />
+            <stop offset=\"0%\" stop-color=\"#040b1a\" />
+            <stop offset=\"100%\" stop-color=\"#160a24\" />
         </linearGradient>
         <linearGradient id=\"accent\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">
-            <stop offset=\"0%\" stop-color=\"#ef4444\" />
-            <stop offset=\"100%\" stop-color=\"#f97316\" />
+            <stop offset=\"0%\" stop-color=\"#cd408f\" />
+            <stop offset=\"100%\" stop-color=\"#0c4fc2\" />
         </linearGradient>
     </defs>
     <rect width=\"1200\" height=\"630\" fill=\"url(#bg)\" />
-    <circle cx=\"1100\" cy=\"80\" r=\"180\" fill=\"#ef4444\" opacity=\"0.16\" />
-    <circle cx=\"120\" cy=\"610\" r=\"240\" fill=\"#f97316\" opacity=\"0.14\" />
-    <rect x=\"86\" y=\"74\" width=\"1028\" height=\"482\" rx=\"28\" fill=\"#0f172a\" stroke=\"#374151\" />
+    <circle cx=\"1100\" cy=\"80\" r=\"180\" fill=\"#08398c\" opacity=\"0.12\" />
+    <circle cx=\"120\" cy=\"610\" r=\"240\" fill=\"#8e2d63\" opacity=\"0.11\" />
+    <rect x=\"86\" y=\"74\" width=\"1028\" height=\"482\" rx=\"28\" fill=\"#0b1426\" stroke=\"#64748b\" />
     <rect x=\"130\" y=\"126\" width=\"176\" height=\"42\" rx=\"21\" fill=\"url(#accent)\" />
     <text x=\"218\" y=\"153\" text-anchor=\"middle\" fill=\"#ffffff\" font-size=\"19\" font-family=\"Inter, Arial, sans-serif\" font-weight=\"700\">Handshake</text>
     <text x=\"130\" y=\"246\" fill=\"#ffffff\" font-size=\"82\" font-family=\"Inter, Arial, sans-serif\" font-weight=\"800\">{title_text}</text>
-    <text x=\"130\" y=\"302\" fill=\"#d1d5db\" font-size=\"32\" font-family=\"Inter, Arial, sans-serif\">{subtitle_text}</text>
-    <line x1=\"130\" y1=\"338\" x2=\"1070\" y2=\"338\" stroke=\"#374151\" />
+    <text x=\"130\" y=\"302\" fill=\"#e5e7eb\" font-size=\"32\" font-family=\"Inter, Arial, sans-serif\">{subtitle_text}</text>
+    <line x1=\"130\" y1=\"338\" x2=\"1070\" y2=\"338\" stroke=\"#64748b\" />
     <text x=\"130\" y=\"402\" fill=\"#f9fafb\" font-size=\"34\" font-family=\"Inter, Arial, sans-serif\" font-weight=\"600\">Blocks • Transactions • Addresses • Names</text>
-    <text x=\"130\" y=\"452\" fill=\"#9ca3af\" font-size=\"28\" font-family=\"Inter, Arial, sans-serif\">Real-time status, searchable history, and rich on-chain data.</text>
-    <text x=\"86\" y=\"608\" fill=\"#9ca3af\" font-size=\"24\" font-family=\"Inter, Arial, sans-serif\">explorer.hns.au</text>
+    <text x=\"130\" y=\"452\" fill=\"#cbd5e1\" font-size=\"28\" font-family=\"Inter, Arial, sans-serif\">Real-time status, searchable history, and rich on-chain data.</text>
+    <text x=\"86\" y=\"608\" fill=\"#cbd5e1\" font-size=\"24\" font-family=\"Inter, Arial, sans-serif\">explorer.hns.au</text>
 </svg>"""
     else:
         svg = f"""<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1200\" height=\"630\" viewBox=\"0 0 1200 630\">
     <defs>
         <linearGradient id=\"bg\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">
-            <stop offset=\"0%\" stop-color=\"#111827\" />
-            <stop offset=\"100%\" stop-color=\"#1f2937\" />
+            <stop offset=\"0%\" stop-color=\"#040b1a\" />
+            <stop offset=\"100%\" stop-color=\"#160a24\" />
         </linearGradient>
         <linearGradient id=\"accent\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">
-            <stop offset=\"0%\" stop-color=\"#ef4444\" />
-            <stop offset=\"100%\" stop-color=\"#f97316\" />
+            <stop offset=\"0%\" stop-color=\"#cd408f\" />
+            <stop offset=\"100%\" stop-color=\"#0c4fc2\" />
         </linearGradient>
         <clipPath id=\"valueClip\">
             <rect x=\"96\" y=\"496\" width=\"1008\" height=\"52\" rx=\"4\" />
         </clipPath>
     </defs>
     <rect width=\"1200\" height=\"630\" fill=\"url(#bg)\" />
-    <circle cx=\"1040\" cy=\"120\" r=\"180\" fill=\"#ef4444\" opacity=\"0.14\" />
-    <circle cx=\"160\" cy=\"580\" r=\"220\" fill=\"#f97316\" opacity=\"0.12\" />
+    <circle cx=\"1040\" cy=\"120\" r=\"180\" fill=\"#08398c\" opacity=\"0.11\" />
+    <circle cx=\"160\" cy=\"580\" r=\"220\" fill=\"#8e2d63\" opacity=\"0.10\" />
     <rect x=\"72\" y=\"64\" width=\"240\" height=\"44\" rx=\"22\" fill=\"url(#accent)\" />
     <text x=\"192\" y=\"92\" text-anchor=\"middle\" fill=\"#ffffff\" font-size=\"20\" font-family=\"Inter, Arial, sans-serif\" font-weight=\"700\">{type_text}</text>
     <text x=\"72\" y=\"188\" fill=\"#ffffff\" font-size=\"62\" font-family=\"Inter, Arial, sans-serif\" font-weight=\"700\">{title_text}</text>
-    <text x=\"72\" y=\"252\" fill=\"#d1d5db\" font-size=\"33\" font-family=\"Inter, Arial, sans-serif\">{subtitle_text}</text>
-    <rect x=\"72\" y=\"472\" width=\"1056\" height=\"96\" rx=\"16\" fill=\"#0b1220\" stroke=\"#374151\" />
+    <text x=\"72\" y=\"252\" fill=\"#e5e7eb\" font-size=\"33\" font-family=\"Inter, Arial, sans-serif\">{subtitle_text}</text>
+    <rect x=\"72\" y=\"472\" width=\"1056\" height=\"96\" rx=\"16\" fill=\"#0b1426\" stroke=\"#64748b\" />
     <text x=\"96\" y=\"530\" clip-path=\"url(#valueClip)\" fill=\"#f9fafb\" font-size=\"{value_font_size}\" font-family=\"'JetBrains Mono', 'Consolas', monospace\">{value_text}</text>
-    <text x=\"72\" y=\"610\" fill=\"#9ca3af\" font-size=\"24\" font-family=\"Inter, Arial, sans-serif\">explorer.hns.au</text>
+    <text x=\"72\" y=\"610\" fill=\"#cbd5e1\" font-size=\"24\" font-family=\"Inter, Arial, sans-serif\">explorer.hns.au</text>
 </svg>"""
 
     response = make_response(svg)
     response.headers["Content-Type"] = "image/svg+xml; charset=utf-8"
+    response.headers["Cache-Control"] = "public, max-age=300"
+    return response
+
+
+@app.route("/og-image.png")
+def og_image_png():
+    try:
+        image_module = importlib.import_module("PIL.Image")
+        image_draw_module = importlib.import_module("PIL.ImageDraw")
+    except Exception:
+        if os.path.isfile("templates/assets/img/og.png"):
+            return send_from_directory("templates/assets/img", "og.png")
+        return og_image()
+
+    context = _get_og_image_context()
+    title = context["title"]
+    subtitle = context["subtitle"]
+    search_type = context["search_type"]
+    display_value = context["display_value"]
+    is_default_card = context["is_default_card"]
+
+    width, height = 1200, 630
+    image = image_module.new("RGBA", (width, height), "#040b1a")
+    draw = image_draw_module.Draw(image, "RGBA")
+
+    draw.rectangle((0, 0, width, height), fill="#040b1a")
+    draw.ellipse((920, -60, 1280, 300), fill=(8, 57, 140, 30))
+    draw.ellipse((-120, 360, 360, 840), fill=(142, 45, 99, 32))
+
+    title_font = _load_og_font(62, bold=True)
+    subtitle_font = _load_og_font(33, bold=False)
+    label_font = _load_og_font(20, bold=True)
+    mono_font = _load_og_font(30, bold=False)
+    footer_font = _load_og_font(24, bold=False)
+
+    if is_default_card:
+        draw.rounded_rectangle(
+            (86, 74, 1114, 556), radius=28, fill="#0b1426", outline="#64748b", width=2
+        )
+        draw.rounded_rectangle((130, 126, 306, 168), radius=21, fill="#cd408f")
+        draw.text((165, 133), "Handshake", fill="#ffffff", font=label_font)
+
+        nice_title_font = _load_og_font(82, bold=True)
+        nice_subtitle_font = _load_og_font(32, bold=False)
+        features_font = _load_og_font(34, bold=True)
+        subfeatures_font = _load_og_font(28, bold=False)
+
+        safe_title = _fit_text(draw, title, nice_title_font, 940)
+        safe_subtitle = _fit_text(draw, subtitle, nice_subtitle_font, 940)
+        draw.text((130, 206), safe_title, fill="#ffffff", font=nice_title_font)
+        draw.text((130, 274), safe_subtitle, fill="#e5e7eb", font=nice_subtitle_font)
+        draw.line((130, 338, 1070, 338), fill="#64748b", width=2)
+        draw.text(
+            (130, 372),
+            "Blocks • Transactions • Addresses • Names",
+            fill="#f9fafb",
+            font=features_font,
+        )
+        draw.text(
+            (130, 424),
+            "Real-time status, searchable history, and rich on-chain data.",
+            fill="#cbd5e1",
+            font=subfeatures_font,
+        )
+        draw.text((86, 580), "explorer.hns.au", fill="#cbd5e1", font=footer_font)
+    else:
+        draw.rounded_rectangle((72, 64, 312, 108), radius=22, fill="#cd408f")
+
+        safe_type = _fit_text(draw, search_type, label_font, 220)
+        type_width = draw.textbbox((0, 0), safe_type, font=label_font)[2]
+        draw.text(
+            (192 - type_width // 2, 72), safe_type, fill="#ffffff", font=label_font
+        )
+
+        safe_title = _fit_text(draw, title, title_font, 1040)
+        safe_subtitle = _fit_text(draw, subtitle, subtitle_font, 1040)
+        draw.text((72, 144), safe_title, fill="#ffffff", font=title_font)
+        draw.text((72, 214), safe_subtitle, fill="#e5e7eb", font=subtitle_font)
+
+        draw.rounded_rectangle(
+            (72, 472, 1128, 568), radius=16, fill="#0b1426", outline="#64748b", width=2
+        )
+        value_max_px = 1008
+        safe_value = _fit_text(draw, display_value, mono_font, value_max_px)
+        draw.text((96, 500), safe_value, fill="#f9fafb", font=mono_font)
+
+        draw.text((72, 580), "explorer.hns.au", fill="#cbd5e1", font=footer_font)
+
+    output = BytesIO()
+    image.convert("RGB").save(output, format="PNG", optimize=True)
+    output.seek(0)
+    response = send_file(output, mimetype="image/png")
     response.headers["Cache-Control"] = "public, max-age=300"
     return response
 
