@@ -289,9 +289,24 @@ def _build_og_context(
             og["image_query"]["subtitle"] = subtitle
 
     elif search_type == "address":
-        txs, err = _fetch_explorer_json(f"tx/address/{search_value}")
-        if not err and isinstance(txs, list):
-            subtitle = f"{len(txs)} related transactions found"
+        txs, tx_err = _fetch_explorer_json(f"tx/address/{search_value}")
+        coins, coin_err = _fetch_explorer_json(f"coin/address/{search_value}")
+
+        tx_count = len(txs) if isinstance(txs, list) else None
+        balance_value = (
+            sum((coin.get("value") or 0) for coin in coins)
+            if isinstance(coins, list)
+            else None
+        )
+
+        if tx_count is not None or balance_value is not None:
+            parts = []
+            if balance_value is not None:
+                parts.append(f"Balance {_safe_hns_value(balance_value)}")
+            if tx_count is not None:
+                parts.append(f"{_format_int(tx_count, '0')} related transactions")
+
+            subtitle = " • ".join(parts)
             og["title"] = _truncate("Address | Fire Explorer", 100)
             og["description"] = _truncate(subtitle, 200)
             og["image_query"]["subtitle"] = subtitle
