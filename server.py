@@ -12,14 +12,24 @@ import os
 import requests
 import sqlite3
 from datetime import datetime
+from urllib.parse import urlencode
+from io import BytesIO
+from xml.sax.saxutils import escape
+import importlib
 import dotenv
 from tools import hip2, wallet_txt
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 dotenv.load_dotenv()
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 DATABASE = os.getenv("DATABASE_PATH", "fireexplorer.db")
+HSD_API_BASE = os.getenv("HSD_API_BASE", "https://hsd.hns.au/api/v1")
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+OG_FONT_DIR = os.path.join(BASE_DIR, "templates", "assets", "fonts")
 
 
 def get_db():
@@ -58,6 +68,438 @@ def find(name, path):
     for root, dirs, files in os.walk(path):
         if name in files:
             return os.path.join(root, name)
+
+
+def _truncate(text: str, max_length: int) -> str:
+    if len(text) <= max_length:
+        return text
+    return text[: max_length - 1] + "…"
+
+
+def _safe_hns_value(value) -> str:
+    try:
+        return f"{float(value) / 1e6:,.2f} HNS"
+    except Exception:
+        return "Unknown"
+
+
+def _format_int(value, fallback: str = "?") -> str:
+    try:
+        return f"{int(value):,}"
+    except Exception:
+        return fallback
+
+
+def _ellipsize_middle(text: str, max_length: int = 48) -> str:
+    if len(text) <= max_length:
+        return text
+    if max_length < 7:
+        return _truncate(text, max_length)
+    left = (max_length - 1) // 2
+    right = max_length - left - 1
+    return f"{text[:left]}…{text[-right:]}"
+
+
+def _fetch_explorer_json(endpoint: str):
+    try:
+        req = requests.get(f"{HSD_API_BASE}/{endpoint}", timeout=4)
+        if req.status_code == 200:
+            return req.json(), None
+        return None, f"HTTP {req.status_code}"
+    except Exception as e:
+        return None, str(e)
+
+
+def _get_public_base_url() -> str:
+    if PUBLIC_BASE_URL:
+        return PUBLIC_BASE_URL
+    forwarded_proto = request.headers.get("X-Forwarded-Proto")
+    forwarded_host = request.headers.get("X-Forwarded-Host")
+    if forwarded_proto and forwarded_host:
+        proto = forwarded_proto.split(",")[0].strip()
+        host = forwarded_host.split(",")[0].strip()
+        return f"{proto}://{host}"
+    return request.url_root.rstrip("/")
+
+
+def _resolve_namehash(namehash: str) -> str | None:
+    try:
+        db = get_db()
+        cur = db.execute("SELECT name FROM names WHERE namehash = ?", (namehash,))
+        row = cur.fetchone()
+        if row and row["name"]:
+            return row["name"]
+    except Exception:
+        pass
+
+    try:
+        req = requests.get(f"{HSD_API_BASE}/namehash/{namehash}", timeout=3)
+        if req.status_code == 200:
+            name = req.json().get("result")
+            if name:
+                try:
+                    db = get_db()
+                    db.execute(
+                        "INSERT OR REPLACE INTO names (namehash, name) VALUES (?, ?)",
+                        (namehash, name),
+                    )
+                    db.commit()
+                except Exception:
+                    pass
+                return name
+    except Exception:
+        pass
+
+    return None
+
+
+def _summarize_transaction(tx: dict) -> str:
+    outputs = tx.get("outputs", []) if isinstance(tx, dict) else []
+    inputs = tx.get("inputs", []) if isinstance(tx, dict) else []
+
+    if not outputs:
+        return "Transaction details available"
+
+    action_counts: dict[str, int] = {}
+    for output in outputs:
+        covenant = output.get("covenant") or {}
+        action = (covenant.get("action") or "NONE").upper()
+        action_counts[action] = action_counts.get(action, 0) + 1
+
+    finalize_count = action_counts.get("FINALIZE", 0)
+    if finalize_count > 1:
+        return f"Finalized {finalize_count:,} domains"
+
+    # Covenant-aware summary for domain operations (e.g., BID)
+    for output in outputs:
+        covenant = output.get("covenant") or {}
+        action = (covenant.get("action") or "").upper()
+        if action and action != "NONE":
+            value = _safe_hns_value(output.get("value"))
+            items = covenant.get("items") or []
+            name = None
+            if items and isinstance(items[0], str):
+                name = _resolve_namehash(items[0])
+
+            if action == "BID":
+                if name:
+                    return f"Bid {value} on {name}"
+                return f"Bid {value} on a domain"
+
+            if name:
+                return f"{action.title()}ed {name} • Value {value}"
+            return f"{action.title()} covenant • Value {value}"
+
+    # Detect coinbase transaction
+    if inputs:
+        prevout = inputs[0].get("prevout") or {}
+        if (
+            prevout.get("hash")
+            == "0000000000000000000000000000000000000000000000000000000000000000"
+            and prevout.get("index") == 4294967295
+        ):
+            reward = _safe_hns_value(sum((o.get("value") or 0) for o in outputs))
+            return f"Coinbase reward {reward}"
+
+    total_output_value = sum((o.get("value") or 0) for o in outputs)
+    total_output_hns = _safe_hns_value(total_output_value)
+    recipient_addresses = {
+        o.get("address") for o in outputs if o.get("address") and o.get("value", 0) > 0
+    }
+    recipient_count = len(recipient_addresses)
+
+    if recipient_count <= 1:
+        return f"Sent {total_output_hns}"
+
+    return f"Sent a total of {total_output_hns} to {recipient_count} addresses"
+
+
+def _build_og_context(
+    search_type: str | None = None, search_value: str | None = None
+) -> dict:
+    default_title = "Fire Explorer"
+    default_description = "A hot new Handshake Blockchain Explorer"
+
+    if not search_type or not search_value:
+        return {
+            "title": default_title,
+            "description": default_description,
+            "image_query": {"title": default_title, "subtitle": default_description},
+        }
+
+    type_labels = {
+        "block": "Block",
+        "header": "Header",
+        "tx": "Transaction",
+        "address": "Address",
+        "name": "Name",
+    }
+    label = type_labels.get(search_type, "Search")
+
+    fallback_title = f"{label} {search_value} | Fire Explorer"
+    fallback_description = f"View Handshake {label.lower()} details for {search_value}"
+
+    og = {
+        "title": _truncate(fallback_title, 100),
+        "description": _truncate(fallback_description, 200),
+        "image_query": {
+            "type": label,
+            "value": search_value,
+            "title": fallback_title,
+            "subtitle": fallback_description,
+        },
+    }
+
+    if search_type == "block":
+        block, err = _fetch_explorer_json(f"block/{search_value}")
+        if not err and block:
+            tx_count = len(block.get("txs", []))
+            height = block.get("height", "?")
+            timestamp = block.get("time")
+            time_str = (
+                datetime.utcfromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M UTC")
+                if timestamp
+                else "Unknown time"
+            )
+            height_fmt = _format_int(height)
+            tx_count_fmt = _format_int(tx_count, "0")
+            subtitle = f"Height {height_fmt} • {tx_count_fmt} txs • {time_str}"
+            og["title"] = _truncate(f"Block {height_fmt} | Fire Explorer", 100)
+            og["description"] = _truncate(subtitle, 200)
+            og["image_query"]["subtitle"] = subtitle
+
+    elif search_type == "header":
+        header, err = _fetch_explorer_json(f"header/{search_value}")
+        if not err and header:
+            height = header.get("height", "?")
+            bits = header.get("bits", "?")
+            subtitle = f"Height {height} • Bits {bits}"
+            og["title"] = _truncate(f"Header {height} | Fire Explorer", 100)
+            og["description"] = _truncate(subtitle, 200)
+            og["image_query"]["subtitle"] = subtitle
+
+    elif search_type == "tx":
+        tx, err = _fetch_explorer_json(f"tx/{search_value}")
+        if not err and tx:
+            tx_summary = _summarize_transaction(tx)
+            fee = _safe_hns_value(tx.get("fee"))
+            subtitle = f"{tx_summary} • Fee {fee}"
+            og["title"] = _truncate("Transaction | Fire Explorer", 100)
+            og["description"] = _truncate(subtitle, 200)
+            og["image_query"]["subtitle"] = subtitle
+
+    elif search_type == "address":
+        txs, tx_err = _fetch_explorer_json(f"tx/address/{search_value}")
+        coins, coin_err = _fetch_explorer_json(f"coin/address/{search_value}")
+
+        tx_count = len(txs) if isinstance(txs, list) else None
+        balance_value = (
+            sum((coin.get("value") or 0) for coin in coins)
+            if isinstance(coins, list)
+            else None
+        )
+
+        if tx_count is not None or balance_value is not None:
+            parts = []
+            if balance_value is not None:
+                parts.append(f"Balance {_safe_hns_value(balance_value)}")
+            if tx_count is not None:
+                parts.append(f"{_format_int(tx_count, '0')} related transactions")
+
+            subtitle = " • ".join(parts)
+            og["title"] = _truncate("Address | Fire Explorer", 100)
+            og["description"] = _truncate(subtitle, 200)
+            og["image_query"]["subtitle"] = subtitle
+
+    elif search_type == "name":
+        name, err = _fetch_explorer_json(f"name/{search_value}")
+        if not err and name:
+            info = name.get("info", name)
+            state = info.get("state", "Unknown")
+            owner = info.get("owner", {}).get("hash", "Unknown")
+            value = info.get("value")
+            cost_text = _safe_hns_value(value) if value is not None else "Unknown"
+            subtitle = (
+                f"State: {state} • Cost: {cost_text} • Owner: {_truncate(owner, 18)}"
+            )
+            og["title"] = _truncate(f"Name {search_value} | Fire Explorer", 100)
+            og["description"] = _truncate(subtitle, 200)
+            og["image_query"]["subtitle"] = subtitle
+
+    og["image_query"]["title"] = og["title"]
+    return og
+
+
+def _render_index(search_type: str | None = None, search_value: str | None = None):
+    current_datetime = datetime.now().strftime("%d %b %Y %I:%M %p")
+    og_context = _build_og_context(search_type, search_value)
+    image_query = og_context["image_query"]
+    public_base_url = _get_public_base_url()
+    og_image_url = public_base_url + "/og-image.png?" + urlencode(image_query)
+    og_url = public_base_url + request.full_path
+    if og_url.endswith("?"):
+        og_url = og_url[:-1]
+
+    twitter_domain = request.host
+    if PUBLIC_BASE_URL and "//" in PUBLIC_BASE_URL:
+        twitter_domain = PUBLIC_BASE_URL.split("//", 1)[1]
+
+    return render_template(
+        "index.html",
+        datetime=current_datetime,
+        meta_title=og_context["title"],
+        meta_description=og_context["description"],
+        og_url=og_url,
+        og_image=og_image_url,
+        twitter_domain=twitter_domain,
+    )
+
+
+def _get_og_image_context() -> dict:
+    title = _truncate(request.args.get("title", "Fire Explorer"), 90)
+    subtitle = _truncate(
+        request.args.get("subtitle", "A hot new Handshake Blockchain Explorer"),
+        140,
+    )
+    search_type = _truncate(request.args.get("type", "Explorer"), 24)
+    search_value = request.args.get("value", "")
+
+    normalized_type = search_type.strip().lower()
+    value_max_length = 44
+    if normalized_type in {"transaction", "tx"}:
+        value_max_length = 30
+
+    display_value = _ellipsize_middle(search_value, value_max_length)
+    if search_value.isdigit() and int(search_value) > 100:
+        display_value = f"{int(search_value):,}"
+
+    value_font_size = "30"
+    if len(display_value) > 34:
+        value_font_size = "26"
+
+    is_default_card = not search_value.strip() and normalized_type in {
+        "explorer",
+        "search",
+        "",
+    }
+
+    return {
+        "title": title,
+        "subtitle": subtitle,
+        "search_type": search_type,
+        "search_value": search_value,
+        "display_value": display_value,
+        "value_font_size": value_font_size,
+        "is_default_card": is_default_card,
+    }
+
+
+def _load_og_font(size: int, bold: bool = False, mono: bool = False):
+    try:
+        image_font_module = importlib.import_module("PIL.ImageFont")
+        if mono:
+            candidates = [
+                os.path.join(OG_FONT_DIR, "DejaVuSansMono.ttf"),
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+                "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
+                "/usr/share/fonts/dejavu/DejaVuSansMono.ttf",
+                "/usr/share/fonts/truetype/liberation2/LiberationMono-Regular.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+                "DejaVuSansMono.ttf",
+            ]
+        elif bold:
+            candidates = [
+                os.path.join(OG_FONT_DIR, "DejaVuSans-Bold.ttf"),
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                "DejaVuSans-Bold.ttf",
+            ]
+        else:
+            candidates = [
+                os.path.join(OG_FONT_DIR, "DejaVuSans.ttf"),
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/TTF/DejaVuSans.ttf",
+                "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+                "DejaVuSans.ttf",
+            ]
+
+        for candidate in candidates:
+            try:
+                return image_font_module.truetype(candidate, size=size)
+            except Exception:
+                continue
+
+        return image_font_module.load_default()
+    except Exception:
+        try:
+            image_font_module = importlib.import_module("PIL.ImageFont")
+            return image_font_module.load_default()
+        except Exception:
+            return None
+
+
+def _fit_text(draw, text: str, font, max_width: int) -> str:
+    candidate = text
+    while candidate:
+        bbox = draw.textbbox((0, 0), candidate, font=font)
+        if bbox[2] - bbox[0] <= max_width:
+            return candidate
+        candidate = candidate[:-1]
+
+    if text:
+        return "…"
+    return text
+
+
+def _wrap_text(draw, text: str, font, max_width: int, max_lines: int = 2) -> list[str]:
+    if not text:
+        return [""]
+
+    words = text.split()
+    if not words:
+        return [_fit_text(draw, text, font, max_width)]
+
+    lines: list[str] = []
+    current = words[0]
+
+    for word in words[1:]:
+        candidate = f"{current} {word}"
+        bbox = draw.textbbox((0, 0), candidate, font=font)
+        if bbox[2] - bbox[0] <= max_width:
+            current = candidate
+            continue
+
+        lines.append(_fit_text(draw, current, font, max_width))
+        current = word
+
+        if len(lines) >= max_lines - 1:
+            break
+
+    remaining_words = words[len(" ".join(lines + [current]).split()) :]
+    tail = current
+    if remaining_words:
+        tail = f"{current} {' '.join(remaining_words)}"
+
+    if len(lines) < max_lines:
+        lines.append(_fit_text(draw, tail, font, max_width))
+
+    return lines[:max_lines]
+
+
+def _draw_text_shadow(
+    draw, position: tuple[int, int], text: str, font, fill, shadow=(0, 0, 0, 140)
+):
+    if not text:
+        return
+
+    x, y = position
+    draw.text((x + 2, y + 2), text, fill=shadow, font=font)
+    draw.text((x, y), text, fill=fill, font=font)
 
 
 # Assets routes
@@ -108,44 +550,228 @@ def wellknown(path):
 # region Main routes
 @app.route("/")
 def index():
-    current_datetime = datetime.now().strftime("%d %b %Y %I:%M %p")
-    return render_template("index.html", datetime=current_datetime)
+    return _render_index()
 
 
 @app.route("/tx/<path:tx_hash>")
 def tx_route(tx_hash):
-    current_datetime = datetime.now().strftime("%d %b %Y %I:%M %p")
-    return render_template("index.html", datetime=current_datetime)
+    return _render_index("tx", tx_hash)
 
 
 @app.route("/block/<path:block_id>")
 def block_route(block_id):
-    current_datetime = datetime.now().strftime("%d %b %Y %I:%M %p")
-    return render_template("index.html", datetime=current_datetime)
+    return _render_index("block", block_id)
 
 
 @app.route("/header/<path:block_id>")
 def header_route(block_id):
-    current_datetime = datetime.now().strftime("%d %b %Y %I:%M %p")
-    return render_template("index.html", datetime=current_datetime)
+    return _render_index("header", block_id)
 
 
 @app.route("/address/<path:address>")
 def address_route(address):
-    current_datetime = datetime.now().strftime("%d %b %Y %I:%M %p")
-    return render_template("index.html", datetime=current_datetime)
+    return _render_index("address", address)
 
 
 @app.route("/name/<path:name>")
 def name_route(name):
-    current_datetime = datetime.now().strftime("%d %b %Y %I:%M %p")
-    return render_template("index.html", datetime=current_datetime)
+    return _render_index("name", name)
 
 
 @app.route("/coin/<path:coin_hash>/<int:index>")
 def coin_route(coin_hash, index):
-    current_datetime = datetime.now().strftime("%d %b %Y %I:%M %p")
-    return render_template("index.html", datetime=current_datetime)
+    return _render_index("coin", f"{coin_hash}:{index}")
+
+
+@app.route("/og-image")
+def og_image():
+    context = _get_og_image_context()
+    title = context["title"]
+    subtitle = context["subtitle"]
+    search_type = context["search_type"]
+    display_value = context["display_value"]
+    value_font_size = context["value_font_size"]
+    is_default_card = context["is_default_card"]
+
+    type_text = escape(search_type)
+    value_text = escape(display_value)
+    title_text = escape(title)
+    subtitle_text = escape(subtitle)
+
+    if is_default_card:
+        svg = f"""<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1200\" height=\"630\" viewBox=\"0 0 1200 630\">
+    <defs>
+        <linearGradient id=\"bg\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">
+            <stop offset=\"0%\" stop-color=\"#040b1a\" />
+            <stop offset=\"100%\" stop-color=\"#160a24\" />
+        </linearGradient>
+        <linearGradient id=\"accent\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">
+            <stop offset=\"0%\" stop-color=\"#cd408f\" />
+            <stop offset=\"100%\" stop-color=\"#0c4fc2\" />
+        </linearGradient>
+    </defs>
+    <rect width=\"1200\" height=\"630\" fill=\"url(#bg)\" />
+    <circle cx=\"1100\" cy=\"80\" r=\"180\" fill=\"#08398c\" opacity=\"0.12\" />
+    <circle cx=\"120\" cy=\"610\" r=\"240\" fill=\"#8e2d63\" opacity=\"0.11\" />
+    <rect x=\"86\" y=\"74\" width=\"1028\" height=\"482\" rx=\"28\" fill=\"#0b1426\" stroke=\"#64748b\" />
+    <rect x=\"130\" y=\"126\" width=\"176\" height=\"42\" rx=\"21\" fill=\"url(#accent)\" />
+    <text x=\"218\" y=\"153\" text-anchor=\"middle\" fill=\"#ffffff\" font-size=\"19\" font-family=\"Inter, Arial, sans-serif\" font-weight=\"700\">Handshake</text>
+    <text x=\"130\" y=\"246\" fill=\"#ffffff\" font-size=\"82\" font-family=\"Inter, Arial, sans-serif\" font-weight=\"800\">{title_text}</text>
+    <text x=\"130\" y=\"302\" fill=\"#e5e7eb\" font-size=\"32\" font-family=\"Inter, Arial, sans-serif\">{subtitle_text}</text>
+    <line x1=\"130\" y1=\"338\" x2=\"1070\" y2=\"338\" stroke=\"#64748b\" />
+    <text x=\"130\" y=\"402\" fill=\"#f9fafb\" font-size=\"34\" font-family=\"Inter, Arial, sans-serif\" font-weight=\"600\">Blocks • Transactions • Addresses • Names</text>
+    <text x=\"130\" y=\"452\" fill=\"#cbd5e1\" font-size=\"28\" font-family=\"Inter, Arial, sans-serif\">Real-time status, searchable history, and rich on-chain data.</text>
+    <text x=\"86\" y=\"608\" fill=\"#cbd5e1\" font-size=\"24\" font-family=\"Inter, Arial, sans-serif\">explorer.hns.au</text>
+</svg>"""
+    else:
+        svg = f"""<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1200\" height=\"630\" viewBox=\"0 0 1200 630\">
+    <defs>
+        <linearGradient id=\"bg\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">
+            <stop offset=\"0%\" stop-color=\"#040b1a\" />
+            <stop offset=\"100%\" stop-color=\"#160a24\" />
+        </linearGradient>
+        <linearGradient id=\"accent\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\">
+            <stop offset=\"0%\" stop-color=\"#cd408f\" />
+            <stop offset=\"100%\" stop-color=\"#0c4fc2\" />
+        </linearGradient>
+        <clipPath id=\"valueClip\">
+            <rect x=\"96\" y=\"496\" width=\"1008\" height=\"52\" rx=\"4\" />
+        </clipPath>
+    </defs>
+    <rect width=\"1200\" height=\"630\" fill=\"url(#bg)\" />
+    <circle cx=\"1040\" cy=\"120\" r=\"180\" fill=\"#08398c\" opacity=\"0.11\" />
+    <circle cx=\"160\" cy=\"580\" r=\"220\" fill=\"#8e2d63\" opacity=\"0.10\" />
+    <rect x=\"72\" y=\"64\" width=\"240\" height=\"44\" rx=\"22\" fill=\"url(#accent)\" />
+    <text x=\"192\" y=\"92\" text-anchor=\"middle\" fill=\"#ffffff\" font-size=\"20\" font-family=\"Inter, Arial, sans-serif\" font-weight=\"700\">{type_text}</text>
+    <text x=\"72\" y=\"188\" fill=\"#ffffff\" font-size=\"62\" font-family=\"Inter, Arial, sans-serif\" font-weight=\"700\">{title_text}</text>
+    <text x=\"72\" y=\"252\" fill=\"#e5e7eb\" font-size=\"33\" font-family=\"Inter, Arial, sans-serif\">{subtitle_text}</text>
+    <rect x=\"72\" y=\"472\" width=\"1056\" height=\"96\" rx=\"16\" fill=\"#0b1426\" stroke=\"#64748b\" />
+    <text x=\"96\" y=\"530\" clip-path=\"url(#valueClip)\" fill=\"#f9fafb\" font-size=\"{value_font_size}\" font-family=\"'JetBrains Mono', 'Consolas', monospace\">{value_text}</text>
+    <text x=\"72\" y=\"610\" fill=\"#cbd5e1\" font-size=\"24\" font-family=\"Inter, Arial, sans-serif\">explorer.hns.au</text>
+</svg>"""
+
+    response = make_response(svg)
+    response.headers["Content-Type"] = "image/svg+xml; charset=utf-8"
+    response.headers["Cache-Control"] = "public, max-age=300"
+    return response
+
+
+@app.route("/og-image.png")
+def og_image_png():
+    try:
+        image_module = importlib.import_module("PIL.Image")
+        image_draw_module = importlib.import_module("PIL.ImageDraw")
+    except Exception:
+        if os.path.isfile("templates/assets/img/og.png"):
+            return send_from_directory("templates/assets/img", "og.png")
+        return og_image()
+
+    context = _get_og_image_context()
+    title = context["title"]
+    subtitle = context["subtitle"]
+    search_type = context["search_type"]
+    display_value = context["display_value"]
+    is_default_card = context["is_default_card"]
+
+    width, height = 1200, 630
+    image = image_module.new("RGBA", (width, height), "#040b1a")
+    draw = image_draw_module.Draw(image, "RGBA")
+
+    draw.rectangle((0, 0, width, height), fill="#040b1a")
+    draw.ellipse((920, -60, 1280, 300), fill=(8, 57, 140, 30))
+    draw.ellipse((-120, 360, 360, 840), fill=(142, 45, 99, 32))
+
+    title_font = _load_og_font(56, bold=True)
+    subtitle_font = _load_og_font(33, bold=False)
+    label_font = _load_og_font(20, bold=True)
+    mono_font = _load_og_font(30, bold=False, mono=True)
+    footer_font = _load_og_font(24, bold=False)
+
+    if is_default_card:
+        draw.rounded_rectangle(
+            (86, 74, 1114, 556), radius=28, fill="#0b1426", outline="#64748b", width=2
+        )
+        draw.rounded_rectangle((130, 126, 306, 168), radius=21, fill="#cd408f")
+        _draw_text_shadow(draw, (165, 133), "Handshake", label_font, "#ffffff")
+
+        nice_title_font = _load_og_font(74, bold=True)
+        nice_subtitle_font = _load_og_font(30, bold=False)
+        features_font = _load_og_font(34, bold=True)
+        subfeatures_font = _load_og_font(28, bold=False)
+
+        title_lines = _wrap_text(draw, title, nice_title_font, 940, max_lines=2)
+        subtitle_lines = _wrap_text(
+            draw, subtitle, nice_subtitle_font, 940, max_lines=2
+        )
+
+        title_y = 192
+        for line in title_lines:
+            _draw_text_shadow(draw, (130, title_y), line, nice_title_font, "#ffffff")
+            title_y += 76
+
+        subtitle_y = title_y + 8
+        for line in subtitle_lines:
+            _draw_text_shadow(
+                draw, (130, subtitle_y), line, nice_subtitle_font, "#e5e7eb"
+            )
+            subtitle_y += 38
+
+        divider_y = subtitle_y + 18
+        draw.line((130, divider_y, 1070, divider_y), fill="#64748b", width=2)
+
+        features_y = divider_y + 30
+        _draw_text_shadow(
+            draw,
+            (130, features_y),
+            "Blocks • Transactions • Addresses • Names",
+            features_font,
+            "#f9fafb",
+        )
+        _draw_text_shadow(
+            draw,
+            (130, features_y + 52),
+            "Real-time status, searchable history, and rich on-chain data.",
+            subfeatures_font,
+            "#cbd5e1",
+        )
+        _draw_text_shadow(draw, (86, 580), "explorer.hns.au", footer_font, "#cbd5e1")
+    else:
+        draw.rounded_rectangle((72, 64, 312, 108), radius=22, fill="#cd408f")
+
+        safe_type = _fit_text(draw, search_type, label_font, 220)
+        type_width = draw.textbbox((0, 0), safe_type, font=label_font)[2]
+        _draw_text_shadow(
+            draw, (192 - type_width // 2, 72), safe_type, label_font, "#ffffff"
+        )
+
+        title_lines = _wrap_text(draw, title, title_font, 1040, max_lines=2)
+        subtitle_lines = _wrap_text(draw, subtitle, subtitle_font, 1040, max_lines=2)
+
+        title_y = 132
+        for line in title_lines:
+            _draw_text_shadow(draw, (72, title_y), line, title_font, "#ffffff")
+            title_y += 66
+
+        subtitle_y = title_y + 8
+        for line in subtitle_lines:
+            _draw_text_shadow(draw, (72, subtitle_y), line, subtitle_font, "#e5e7eb")
+            subtitle_y += 38
+
+        draw.rounded_rectangle(
+            (72, 472, 1128, 568), radius=16, fill="#0b1426", outline="#64748b", width=2
+        )
+        value_max_px = 1008
+        safe_value = _fit_text(draw, display_value, mono_font, value_max_px)
+        _draw_text_shadow(draw, (96, 500), safe_value, mono_font, "#f9fafb")
+
+        _draw_text_shadow(draw, (72, 580), "explorer.hns.au", footer_font, "#cbd5e1")
+
+    output = BytesIO()
+    image.convert("RGB").save(output, format="PNG", optimize=True)
+    output.seek(0)
+    response = send_file(output, mimetype="image/png")
+    response.headers["Cache-Control"] = "public, max-age=300"
+    return response
 
 
 @app.route("/<path:path>")
