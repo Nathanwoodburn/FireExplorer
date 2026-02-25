@@ -330,6 +330,9 @@ def og_image():
         value_max_length = 30
 
     display_value = _ellipsize_middle(search_value, value_max_length)
+    # Check if value is a whole number > 100 and format with commas
+    if search_value.isdigit() and int(search_value) > 100:
+        display_value = f"{int(search_value):,}"
     value_font_size = "30"
     if len(display_value) > 34:
         value_font_size = "26"
