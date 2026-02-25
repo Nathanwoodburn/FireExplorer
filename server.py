@@ -110,6 +110,98 @@ def _get_public_base_url() -> str:
     return request.url_root.rstrip("/")
 
 
+def _resolve_namehash(namehash: str) -> str | None:
+    try:
+        db = get_db()
+        cur = db.execute("SELECT name FROM names WHERE namehash = ?", (namehash,))
+        row = cur.fetchone()
+        if row and row["name"]:
+            return row["name"]
+    except Exception:
+        pass
+
+    try:
+        req = requests.get(f"{HSD_API_BASE}/namehash/{namehash}", timeout=3)
+        if req.status_code == 200:
+            name = req.json().get("result")
+            if name:
+                try:
+                    db = get_db()
+                    db.execute(
+                        "INSERT OR REPLACE INTO names (namehash, name) VALUES (?, ?)",
+                        (namehash, name),
+                    )
+                    db.commit()
+                except Exception:
+                    pass
+                return name
+    except Exception:
+        pass
+
+    return None
+
+
+def _summarize_transaction(tx: dict) -> str:
+    outputs = tx.get("outputs", []) if isinstance(tx, dict) else []
+    inputs = tx.get("inputs", []) if isinstance(tx, dict) else []
+
+    if not outputs:
+        return "Transaction details available"
+
+    action_counts: dict[str, int] = {}
+    for output in outputs:
+        covenant = output.get("covenant") or {}
+        action = (covenant.get("action") or "NONE").upper()
+        action_counts[action] = action_counts.get(action, 0) + 1
+
+    finalize_count = action_counts.get("FINALIZE", 0)
+    if finalize_count > 1:
+        return f"Finalized {finalize_count:,} domains"
+
+    # Covenant-aware summary for domain operations (e.g., BID)
+    for output in outputs:
+        covenant = output.get("covenant") or {}
+        action = (covenant.get("action") or "").upper()
+        if action and action != "NONE":
+            value = _safe_hns_value(output.get("value"))
+            items = covenant.get("items") or []
+            name = None
+            if items and isinstance(items[0], str):
+                name = _resolve_namehash(items[0])
+
+            if action == "BID":
+                if name:
+                    return f"Bid {value} on {name}"
+                return f"Bid {value} on a domain"
+
+            if name:
+                return f"{action.title()}ed {name} • Value {value}"
+            return f"{action.title()} covenant • Value {value}"
+
+    # Detect coinbase transaction
+    if inputs:
+        prevout = inputs[0].get("prevout") or {}
+        if (
+            prevout.get("hash")
+            == "0000000000000000000000000000000000000000000000000000000000000000"
+            and prevout.get("index") == 4294967295
+        ):
+            reward = _safe_hns_value(sum((o.get("value") or 0) for o in outputs))
+            return f"Coinbase reward {reward}"
+
+    total_output_value = sum((o.get("value") or 0) for o in outputs)
+    total_output_hns = _safe_hns_value(total_output_value)
+    recipient_addresses = {
+        o.get("address") for o in outputs if o.get("address") and o.get("value", 0) > 0
+    }
+    recipient_count = len(recipient_addresses)
+
+    if recipient_count <= 1:
+        return f"Sent {total_output_hns}"
+
+    return f"Sent a total of {total_output_hns} to {recipient_count} addresses"
+
+
 def _build_og_context(
     search_type: str | None = None, search_value: str | None = None
 ) -> dict:
@@ -177,10 +269,9 @@ def _build_og_context(
     elif search_type == "tx":
         tx, err = _fetch_explorer_json(f"tx/{search_value}")
         if not err and tx:
-            inputs = len(tx.get("inputs", []))
-            outputs = len(tx.get("outputs", []))
+            tx_summary = _summarize_transaction(tx)
             fee = _safe_hns_value(tx.get("fee"))
-            subtitle = f"{inputs} inputs • {outputs} outputs • Fee {fee}"
+            subtitle = f"{tx_summary} • Fee {fee}"
             og["title"] = _truncate("Transaction | Fire Explorer", 100)
             og["description"] = _truncate(subtitle, 200)
             og["image_query"]["subtitle"] = subtitle
