@@ -317,7 +317,11 @@ def _build_og_context(
             info = name.get("info", name)
             state = info.get("state", "Unknown")
             owner = info.get("owner", {}).get("hash", "Unknown")
-            subtitle = f"State: {state} • Owner: {_truncate(owner, 26)}"
+            value = info.get("value")
+            cost_text = _safe_hns_value(value) if value is not None else "Unknown"
+            subtitle = (
+                f"State: {state} • Cost: {cost_text} • Owner: {_truncate(owner, 18)}"
+            )
             og["title"] = _truncate(f"Name {search_value} | Fire Explorer", 100)
             og["description"] = _truncate(subtitle, 200)
             og["image_query"]["subtitle"] = subtitle
@@ -677,7 +681,7 @@ def og_image_png():
     draw.ellipse((920, -60, 1280, 300), fill=(8, 57, 140, 30))
     draw.ellipse((-120, 360, 360, 840), fill=(142, 45, 99, 32))
 
-    title_font = _load_og_font(62, bold=True)
+    title_font = _load_og_font(56, bold=True)
     subtitle_font = _load_og_font(33, bold=False)
     label_font = _load_og_font(20, bold=True)
     mono_font = _load_og_font(30, bold=False, mono=True)
@@ -740,10 +744,15 @@ def og_image_png():
             draw, (192 - type_width // 2, 72), safe_type, label_font, "#ffffff"
         )
 
-        safe_title = _fit_text(draw, title, title_font, 1040)
+        title_lines = _wrap_text(draw, title, title_font, 1040, max_lines=2)
         subtitle_lines = _wrap_text(draw, subtitle, subtitle_font, 1040, max_lines=2)
-        _draw_text_shadow(draw, (72, 144), safe_title, title_font, "#ffffff")
-        subtitle_y = 214
+
+        title_y = 132
+        for line in title_lines:
+            _draw_text_shadow(draw, (72, title_y), line, title_font, "#ffffff")
+            title_y += 66
+
+        subtitle_y = title_y + 8
         for line in subtitle_lines:
             _draw_text_shadow(draw, (72, subtitle_y), line, subtitle_font, "#e5e7eb")
             subtitle_y += 38
