@@ -5,3 +5,4 @@ __pycache__/
 .vs/
 .venv/
 fireexplorer.db
+.vscode

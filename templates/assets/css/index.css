@@ -836,3 +836,7 @@ a:hover {
 .tx-item {
     animation: staggerFade 0.4s ease forwards;
 }
+
+small {
+    color: var(--text-secondary);
+}
