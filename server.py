@@ -437,6 +437,52 @@ def _fit_text(draw, text: str, font, max_width: int) -> str:
     return text
 
 
+def _wrap_text(draw, text: str, font, max_width: int, max_lines: int = 2) -> list[str]:
+    if not text:
+        return [""]
+
+    words = text.split()
+    if not words:
+        return [_fit_text(draw, text, font, max_width)]
+
+    lines: list[str] = []
+    current = words[0]
+
+    for word in words[1:]:
+        candidate = f"{current} {word}"
+        bbox = draw.textbbox((0, 0), candidate, font=font)
+        if bbox[2] - bbox[0] <= max_width:
+            current = candidate
+            continue
+
+        lines.append(_fit_text(draw, current, font, max_width))
+        current = word
+
+        if len(lines) >= max_lines - 1:
+            break
+
+    remaining_words = words[len(" ".join(lines + [current]).split()) :]
+    tail = current
+    if remaining_words:
+        tail = f"{current} {' '.join(remaining_words)}"
+
+    if len(lines) < max_lines:
+        lines.append(_fit_text(draw, tail, font, max_width))
+
+    return lines[:max_lines]
+
+
+def _draw_text_shadow(
+    draw, position: tuple[int, int], text: str, font, fill, shadow=(0, 0, 0, 140)
+):
+    if not text:
+        return
+
+    x, y = position
+    draw.text((x + 2, y + 2), text, fill=shadow, font=font)
+    draw.text((x, y), text, fill=fill, font=font)
+
+
 # Assets routes
 @app.route("/assets/<path:path>")
 def send_assets(path):
@@ -627,53 +673,74 @@ def og_image_png():
             (86, 74, 1114, 556), radius=28, fill="#0b1426", outline="#64748b", width=2
         )
         draw.rounded_rectangle((130, 126, 306, 168), radius=21, fill="#cd408f")
-        draw.text((165, 133), "Handshake", fill="#ffffff", font=label_font)
+        _draw_text_shadow(draw, (165, 133), "Handshake", label_font, "#ffffff")
 
-        nice_title_font = _load_og_font(82, bold=True)
-        nice_subtitle_font = _load_og_font(32, bold=False)
+        nice_title_font = _load_og_font(74, bold=True)
+        nice_subtitle_font = _load_og_font(30, bold=False)
         features_font = _load_og_font(34, bold=True)
         subfeatures_font = _load_og_font(28, bold=False)
 
-        safe_title = _fit_text(draw, title, nice_title_font, 940)
-        safe_subtitle = _fit_text(draw, subtitle, nice_subtitle_font, 940)
-        draw.text((130, 206), safe_title, fill="#ffffff", font=nice_title_font)
-        draw.text((130, 274), safe_subtitle, fill="#e5e7eb", font=nice_subtitle_font)
-        draw.line((130, 338, 1070, 338), fill="#64748b", width=2)
-        draw.text(
-            (130, 372),
+        title_lines = _wrap_text(draw, title, nice_title_font, 940, max_lines=2)
+        subtitle_lines = _wrap_text(
+            draw, subtitle, nice_subtitle_font, 940, max_lines=2
+        )
+
+        title_y = 192
+        for line in title_lines:
+            _draw_text_shadow(draw, (130, title_y), line, nice_title_font, "#ffffff")
+            title_y += 76
+
+        subtitle_y = title_y + 8
+        for line in subtitle_lines:
+            _draw_text_shadow(
+                draw, (130, subtitle_y), line, nice_subtitle_font, "#e5e7eb"
+            )
+            subtitle_y += 38
+
+        divider_y = subtitle_y + 18
+        draw.line((130, divider_y, 1070, divider_y), fill="#64748b", width=2)
+
+        features_y = divider_y + 30
+        _draw_text_shadow(
+            draw,
+            (130, features_y),
             "Blocks • Transactions • Addresses • Names",
-            fill="#f9fafb",
-            font=features_font,
+            features_font,
+            "#f9fafb",
         )
-        draw.text(
-            (130, 424),
+        _draw_text_shadow(
+            draw,
+            (130, features_y + 52),
             "Real-time status, searchable history, and rich on-chain data.",
-            fill="#cbd5e1",
-            font=subfeatures_font,
+            subfeatures_font,
+            "#cbd5e1",
         )
-        draw.text((86, 580), "explorer.hns.au", fill="#cbd5e1", font=footer_font)
+        _draw_text_shadow(draw, (86, 580), "explorer.hns.au", footer_font, "#cbd5e1")
     else:
         draw.rounded_rectangle((72, 64, 312, 108), radius=22, fill="#cd408f")
 
         safe_type = _fit_text(draw, search_type, label_font, 220)
         type_width = draw.textbbox((0, 0), safe_type, font=label_font)[2]
-        draw.text(
-            (192 - type_width // 2, 72), safe_type, fill="#ffffff", font=label_font
+        _draw_text_shadow(
+            draw, (192 - type_width // 2, 72), safe_type, label_font, "#ffffff"
         )
 
         safe_title = _fit_text(draw, title, title_font, 1040)
-        safe_subtitle = _fit_text(draw, subtitle, subtitle_font, 1040)
-        draw.text((72, 144), safe_title, fill="#ffffff", font=title_font)
-        draw.text((72, 214), safe_subtitle, fill="#e5e7eb", font=subtitle_font)
+        subtitle_lines = _wrap_text(draw, subtitle, subtitle_font, 1040, max_lines=2)
+        _draw_text_shadow(draw, (72, 144), safe_title, title_font, "#ffffff")
+        subtitle_y = 214
+        for line in subtitle_lines:
+            _draw_text_shadow(draw, (72, subtitle_y), line, subtitle_font, "#e5e7eb")
+            subtitle_y += 38
 
         draw.rounded_rectangle(
             (72, 472, 1128, 568), radius=16, fill="#0b1426", outline="#64748b", width=2
         )
         value_max_px = 1008
         safe_value = _fit_text(draw, display_value, mono_font, value_max_px)
-        draw.text((96, 500), safe_value, fill="#f9fafb", font=mono_font)
+        _draw_text_shadow(draw, (96, 500), safe_value, mono_font, "#f9fafb")
 
-        draw.text((72, 580), "explorer.hns.au", fill="#cbd5e1", font=footer_font)
+        _draw_text_shadow(draw, (72, 580), "explorer.hns.au", footer_font, "#cbd5e1")
 
     output = BytesIO()
     image.convert("RGB").save(output, format="PNG", optimize=True)
