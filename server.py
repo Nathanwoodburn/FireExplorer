@@ -28,6 +28,8 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 DATABASE = os.getenv("DATABASE_PATH", "fireexplorer.db")
 HSD_API_BASE = os.getenv("HSD_API_BASE", "https://hsd.hns.au/api/v1")
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+OG_FONT_DIR = os.path.join(BASE_DIR, "templates", "assets", "fonts")
 
 
 def get_db():
@@ -373,12 +375,47 @@ def _get_og_image_context() -> dict:
     }
 
 
-def _load_og_font(size: int, bold: bool = False):
+def _load_og_font(size: int, bold: bool = False, mono: bool = False):
     try:
         image_font_module = importlib.import_module("PIL.ImageFont")
-        if bold:
-            return image_font_module.truetype("DejaVuSans-Bold.ttf", size=size)
-        return image_font_module.truetype("DejaVuSans.ttf", size=size)
+        if mono:
+            candidates = [
+                os.path.join(OG_FONT_DIR, "DejaVuSansMono.ttf"),
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+                "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
+                "/usr/share/fonts/dejavu/DejaVuSansMono.ttf",
+                "/usr/share/fonts/truetype/liberation2/LiberationMono-Regular.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+                "DejaVuSansMono.ttf",
+            ]
+        elif bold:
+            candidates = [
+                os.path.join(OG_FONT_DIR, "DejaVuSans-Bold.ttf"),
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                "DejaVuSans-Bold.ttf",
+            ]
+        else:
+            candidates = [
+                os.path.join(OG_FONT_DIR, "DejaVuSans.ttf"),
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/TTF/DejaVuSans.ttf",
+                "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+                "DejaVuSans.ttf",
+            ]
+
+        for candidate in candidates:
+            try:
+                return image_font_module.truetype(candidate, size=size)
+            except Exception:
+                continue
+
+        return image_font_module.load_default()
     except Exception:
         try:
             image_font_module = importlib.import_module("PIL.ImageFont")
@@ -582,7 +619,7 @@ def og_image_png():
     title_font = _load_og_font(62, bold=True)
     subtitle_font = _load_og_font(33, bold=False)
     label_font = _load_og_font(20, bold=True)
-    mono_font = _load_og_font(30, bold=False)
+    mono_font = _load_og_font(30, bold=False, mono=True)
     footer_font = _load_og_font(24, bold=False)
 
     if is_default_card:
