@@ -187,6 +187,9 @@ def _summarize_transaction(tx: dict) -> str:
                 return f"Bid {value} on a domain"
 
             if name:
+              if action.endswith("E"):
+                return f"{action.title()}d {name} • Value {value}"
+              else:
                 return f"{action.title()}ed {name} • Value {value}"
             return f"{action.title()} covenant • Value {value}"
 
